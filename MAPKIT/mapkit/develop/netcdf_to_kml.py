@@ -12,8 +12,6 @@ ramp = 'rainbow'
 name = 'NETCDF TEST'
 path = '/Users/swainn/projects/netcdf_to_kml/netcdf.kml'
 
-
-
 converter = RasterConverter(session=session)
             
 kmlString = converter.getAsKmlGrid(tableName=tableName,
