@@ -10,34 +10,43 @@
 import math
 import xml.etree.ElementTree as ET
 
+
 class RasterConverter(object):
     '''
     An instance of RasterConverter can be used to extract PostGIS
     rasters from a database and convert them into different formats
-    for visualization. Create a new instance of RasterConverter for
-    each raster.
+    for visualization.
     '''
-    _session = None
     
-    # Definitions
+    # Class variables
     LINE_COLOR = 'FF000000'
     LINE_WIDTH = 1
     MAX_HEX_DECIMAL = 255
     
-    def __init__(self, session=None):
+    # Color Ramp Identifiers
+    COLOR_RAMP_HUE = 0
+    COLOR_RAMP_TERRAIN = 1
+    COLOR_RAMP_AQUA = 2
+    
+    def __init__(self, sqlAlchemySession, colorRamp=None):
         '''
         Constructor
         '''
-        self._session = session
+        self._session = sqlAlchemySession
+        
+        if not colorRamp:
+            self._colorRamp = RasterConverter.generateDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
+        else:
+            self._colorRamp = colorRamp
 
-    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterType='discrete', ramp='rainbow', alpha=1.0, name='default'):
+    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterType='discrete', alpha=1.0, name='default'):
         '''
         Creates a KML file with each cell in the raster represented by a polygon. The
         result is a vector grid representation of the raster
         '''
         # Validation
         if not (rasterType == 'continuous' or rasterType == 'discrete'):
-            print 'RASTER CONVERTER WARNING: ' + rasterType + ' is not a valid raster type. Only "continuous" and "discrete" are allowed.'
+            print 'RASTER CONVERTER WARNING: ' + str(rasterType) + ' is not a valid raster type. Only "continuous" and "discrete" are allowed.'
             raise
             
         if not (alpha >= 0 and alpha <= 1.0):
@@ -75,7 +84,7 @@ class RasterConverter(object):
         name.text = name
         
         # Retrieve the color ramp
-        colorRamp = self.colorRamp(ramp)
+        colorRamp = self._colorRamp
         
         # Stats for discreet calcluations
         numValues = len(groups)
@@ -158,12 +167,22 @@ class RasterConverter(object):
                     
         
         return ET.tostring(kml)
-                
-    def colorRamp(self, ramp='rainbow'):
+    
+    def setColorRamp(self, colorRamp=None):
+        '''
+        Set the color ramp of the raster converter instance
+        '''
+        if not colorRamp:
+            self._colorRamp = RasterConverter.generateDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
+        else:
+            self._colorRamp = colorRamp
+         
+    @classmethod       
+    def generateDefaultColorRamp(cls, ramp=COLOR_RAMP_HUE):
         '''
         Returns the color ramp as a list of RGB tuples
         '''
-        rainbow = [(255, 0, 255), (231, 0, 255), (208, 0, 255), (185, 0, 255), (162, 0, 255), (139, 0, 255), (115, 0, 255), (92, 0, 255), (69, 0, 255), (46, 0, 255), (23, 0, 255),        # magenta to blue
+        hue     = [(255, 0, 255), (231, 0, 255), (208, 0, 255), (185, 0, 255), (162, 0, 255), (139, 0, 255), (115, 0, 255), (92, 0, 255), (69, 0, 255), (46, 0, 255), (23, 0, 255),        # magenta to blue
                    (0, 0, 255), (0, 23, 255), (0, 46, 255), (0, 69, 255), (0, 92, 255), (0, 115, 255), (0, 139, 255), (0, 162, 255), (0, 185, 255), (0, 208, 255), (0, 231, 255),          # blue to cyan
                    (0, 255, 255), (0, 255, 231), (0, 255, 208), (0, 255, 185), (0, 255, 162), (0, 255, 139), (0, 255, 115), (0, 255, 92), (0, 255, 69), (0, 255, 46), (0, 255, 23),        # cyan to green
                    (0, 255, 0), (23, 255, 0), (46, 255, 0), (69, 255, 0), (92, 255, 0), (115, 255, 0), (139, 255, 0), (162, 255, 0), (185, 255, 0), (208, 255, 0), (231, 255, 0),          # green to yellow
@@ -182,13 +201,57 @@ class RasterConverter(object):
                 (0, 36, 143), (0, 32, 134), (0, 29, 125), (0, 25, 115), (0, 21, 106), (0, 18, 97), (0, 14, 88), (0, 10, 78), (0, 7, 69), (0, 3, 60), (0, 0, 51)]                                    # navy blue to dark navy blue
         
            
-        if (ramp == 'rainbow'):
-            return rainbow
-        elif (ramp == 'terrain'):
+        if (ramp == cls.COLOR_RAMP_HUE):
+            return hue
+        elif (ramp == cls.COLOR_RAMP_TERRAIN):
             return terrain
-        elif (ramp == 'aqua'):
+        elif (ramp == cls.COLOR_RAMP_AQUA):
             return aqua
 
+    @classmethod
+    def generateCustomColorRamp(cls, colors=[], interpolatedPoints=10):
+        '''
+        Accepts a list of RGB tuples and interpolates between them to create a custom color ramp.
+        Returns the color ramp as a list of RGB tuples.
+        '''
+        if not (isinstance(colors, list)):
+            print 'COLOR RAMP GENERATOR WARNING: colors must be passed in as a list of RGB tuples.'
+            raise
+        
+        numColors = len(colors)
+        
+        colorRamp = []
+        
+        # Iterate over colors
+        for index in range (0, numColors - 1):
+            bottomColor = colors[index]
+            topColor = colors[index + 1]
+            
+            colorRamp.append(bottomColor)
+            
+            # Calculate slopes
+            rSlope = (topColor[0] - bottomColor[0]) / float(interpolatedPoints)
+            gSlope = (topColor[1] - bottomColor[1]) / float(interpolatedPoints)
+            bSlope = (topColor[2] - bottomColor[2]) / float(interpolatedPoints)
+            
+            # Interpolate colors
+            for point in range (1, interpolatedPoints):
+                red = int(rSlope * point + bottomColor[0])
+                green = int(gSlope * point + bottomColor[1])
+                blue = int(bSlope * point + bottomColor[2])
+                color = (red, green, blue)
+                
+                # Make sure the color ramp contains unique colors
+                if not (color in colorRamp):
+                    colorRamp.append(color)
+                
+        # Append the last color
+        colorRamp.append(colors[-1])
+                
+        return colorRamp
+            
+        
+        
                                                                                                          
         
    
