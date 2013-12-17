@@ -3,22 +3,21 @@ import os
 from setuptools import setup, find_packages
 
 requires = [
-    'sqlalchemy>=0.8',
-    'geoalchemy2'
+    'sqlalchemy>=0.8'
     ]
 
-setup(name='gsshapy',
-      version='1.1.0',
-      description='An SQLAlchemy ORM for GSSHA model files.',
+setup(name='mapkit',
+      version='0.0.1',
+      description='Mapping tools for PostGIS-enabled PostgreSQL databases.',
       long_description='',
       author='Nathan Swain',
       author_email='nathan.swain@byu.net',
-      url='https://bitbucket.org/swainn/gsshapy',
+      url='https://bitbucket.org/swainn/mapkit',
       license='BSD 2-Clause License',
-      keywords='gssha database model',
+      keywords='PostGIS, map, GIS',
       packages=find_packages(),
       include_package_data=True,
       install_requires=requires,
       tests_require=requires,
-      test_suite='gsshapy.tests.all_tests'
+      test_suite=''
       )
