@@ -39,7 +39,7 @@ class RasterConverter(object):
         else:
             self._colorRamp = colorRamp
 
-    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterType='discrete', alpha=1.0, name='default'):
+    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', rasterType='discrete', alpha=1.0, name='default'):
         '''
         Creates a KML file with each cell in the raster represented by a polygon. The
         result is a vector grid representation of the raster
@@ -57,11 +57,11 @@ class RasterConverter(object):
         statement = '''
                     SELECT x, y, val, ST_AsKML(geom) AS geomkml
                     FROM (
-                    SELECT (ST_PixelAsPolygons(raster)).*
+                    SELECT (ST_PixelAsPolygons(%s)).*
                     FROM %s WHERE %s=%s
                     ) AS foo
                     ORDER BY val;
-                    ''' % (tableName, rasterIdFieldName, rasterId)
+                    ''' % (rasterFieldName, tableName, rasterIdFieldName, rasterId)
         
         result = self._session.execute(statement)
         
@@ -167,6 +167,31 @@ class RasterConverter(object):
                     
         
         return ET.tostring(kml)
+    
+    def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', rasterType='discrete', alpha=1.0, name='default'):
+        '''
+        Creates a KML file where adjacent cells with the same value are clustered together into a single polygon.
+        The result is a vector cluster representation.
+        '''
+        
+        if not (alpha >= 0 and alpha <= 1.0):
+            print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
+            raise
+        
+        # Get a set of polygons representing cluster of adjacent cells with the same value
+        statement = '''
+                    SELECT val, ST_AsKML(geom) As geomwkt
+                    FROM (
+                    SELECT (ST_DumpAsPolygons(%s)).*
+                    FROM %s WHERE %s=%s
+                    ) As foo
+                    ORDER BY val;
+                    ''' % (rasterFieldName, tableName, rasterIdFieldName, rasterId)
+                    
+        result = self._session.execute(statement)
+        
+        for x in result:
+            print x
     
     def setColorRamp(self, colorRamp=None):
         '''

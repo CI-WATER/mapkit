@@ -8,7 +8,6 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 tableName = 'netcdf_raster'
-ramp = 'rainbow'
 name = 'NETCDF TEST'
 path = '/Users/swainn/projects/netcdf_to_kml/netcdf.kml'
 
@@ -29,5 +28,18 @@ kmlString = converter.getAsKmlGrid(tableName=tableName,
 
 with open(path, 'w') as f:
     f.write(kmlString)
+    
+gsshapyEngine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy')
+gsshapySessionMaker = sessionmaker(bind=gsshapyEngine)
+gsshapySession = gsshapySessionMaker()
 
+gsshapyConverter = RasterConverter(sqlAlchemySession=gsshapySession)
+    
+tableName = 'idx_index_maps'
+name = 'Soils Index Maps'
+path = '/Users/swainn/projects/post_gis/soil_cluster.kml'
+
+kmlString = gsshapyConverter.getAsKmlClusters(tableName=tableName, 
+                                              rasterId=3,
+                                              name=name)
 
