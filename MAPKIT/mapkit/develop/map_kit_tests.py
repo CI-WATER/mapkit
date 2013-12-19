@@ -2,6 +2,10 @@ from mapkit.RasterConverter import RasterConverter
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+# For debugging only
+import xml.etree.ElementTree as ET
+import xml.dom.minidom
+
 
 engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gis')
 Session = sessionmaker(bind=engine)
@@ -40,6 +44,10 @@ name = 'Soils Index Maps'
 path = '/Users/swainn/projects/post_gis/soil_cluster.kml'
 
 kmlString = gsshapyConverter.getAsKmlClusters(tableName=tableName, 
-                                              rasterId=3,
-                                              name=name)
+                                              rasterId=2,
+                                              documentName=name)
 
+with open(path, 'w') as f:
+    pretty = xml.dom.minidom.parseString(kmlString)
+    f.write(pretty.toprettyxml())
+#     f.write(kmlString)

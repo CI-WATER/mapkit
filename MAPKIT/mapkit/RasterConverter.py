@@ -22,6 +22,8 @@ class RasterConverter(object):
     LINE_COLOR = 'FF000000'
     LINE_WIDTH = 1
     MAX_HEX_DECIMAL = 255
+    NO_DATA_VALUE_MIN = float(-1.0)
+    NO_DATA_VALUE_MAX = float(0.0)
     
     # Color Ramp Identifiers
     COLOR_RAMP_HUE = 0
@@ -168,7 +170,7 @@ class RasterConverter(object):
         
         return ET.tostring(kml)
     
-    def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', rasterType='discrete', alpha=1.0, name='default'):
+    def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', rasterType='discrete', alpha=1.0, documentName='default'):
         '''
         Creates a KML file where adjacent cells with the same value are clustered together into a single polygon.
         The result is a vector cluster representation.
@@ -178,9 +180,39 @@ class RasterConverter(object):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
             raise
         
+        # Get min and max for raster band 1
+        statement = '''
+                    SELECT {2}, (stats).min, (stats).max
+                    FROM (
+                    SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
+                    FROM {1}
+                    WHERE {2}={3}
+                    ) As foo;
+                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
+             
+        result = self._session.execute(statement)
+        
+        # extract the stats
+        for row in result:
+            minValue = row.min
+            maxValue = row.max
+            
+        # Map color ramp indicies to values
+        colorRamp = self._colorRamp
+        minRampIndex = 0.0 # Always zero
+        maxRampIndex = float(len(colorRamp)-1)
+        
+        # Map color ramp indices to values using equation of a line
+        # Resulting equation will be:
+        # rampIndex = slope * value + intercept
+        slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
+        intercept = maxRampIndex - (slope * maxValue)
+        
+            
+        
         # Get a set of polygons representing cluster of adjacent cells with the same value
         statement = '''
-                    SELECT val, ST_AsKML(geom) As geomwkt
+                    SELECT val, ST_AsKML(geom) As polygon
                     FROM (
                     SELECT (ST_DumpAsPolygons(%s)).*
                     FROM %s WHERE %s=%s
@@ -190,8 +222,66 @@ class RasterConverter(object):
                     
         result = self._session.execute(statement)
         
-        for x in result:
-            print x
+        # Initialize KML Document            
+        kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
+        document = ET.SubElement(kml, 'Document')
+        documentName = ET.SubElement(document, 'name')
+        documentName.text = documentName
+        
+        for row in result:
+            value = row.val
+            polygonString = row.polygon
+            
+            if ((float(value) > RasterConverter.NO_DATA_VALUE_MAX) or (float(value) < RasterConverter.NO_DATA_VALUE_MIN)):
+                # Create new placemark for each unique value
+                placemark = ET.SubElement(document, 'Placemark')
+                placemarkName = ET.SubElement(placemark, 'name')
+                placemarkName.text = str(value)
+                
+                # Create style tag and setup styles
+                style = ET.SubElement(placemark, 'Style')
+                
+                # Set polygon line style
+                lineStyle = ET.SubElement(style, 'LineStyle')
+                
+                # Set polygon line color and width
+                lineColor = ET.SubElement(lineStyle, 'color')
+                lineColor.text = self.LINE_COLOR
+                lineWidth = ET.SubElement(lineStyle, 'width')
+                lineWidth.text = str(self.LINE_WIDTH)
+                
+                # Set polygon fill color
+                polyStyle = ET.SubElement(style, 'PolyStyle')
+                polyColor = ET.SubElement(polyStyle, 'color')
+                
+                # Get ramp index for polygon fill color
+                rampIndex = math.trunc(slope * float(value) + intercept)
+                
+                # Convert alpha from 0.0-1.0 decimal to 00-FF string
+                integerAlpha = int(alpha * self.MAX_HEX_DECIMAL)
+                
+                # Get RGB color from color ramp and convert to KML hex ABGR string with alpha
+                integerRGB = colorRamp[rampIndex]
+                hexABGR = '%02X%02X%02X%02X' % (integerAlpha, integerRGB[2], integerRGB[1], integerRGB[0])
+                
+                # Set the polygon fill alpha and color
+                polyColor.text = hexABGR
+                
+                # Get polygon object from kml string
+                polygon = ET.fromstring(polygonString)
+                placemark.append(polygon)
+                
+                # Create the data tag
+                extendedData = ET.SubElement(placemark, 'ExtendedData')
+                
+                # Add value to data
+                valueData = ET.SubElement(extendedData, 'Data', name='value')
+                valueValue = ET.SubElement(valueData, 'value')
+                valueValue.text = str(value)
+                
+                
+        return ET.tostring(kml)
+
     
     def setColorRamp(self, colorRamp=None):
         '''
