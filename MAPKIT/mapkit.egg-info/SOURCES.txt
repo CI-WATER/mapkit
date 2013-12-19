@@ -1,6 +1,7 @@
 README.txt
 setup.py
 mapkit/RasterConverter.py
+mapkit/RasterLoader.py
 mapkit/__init__.py
 mapkit.egg-info/PKG-INFO
 mapkit.egg-info/SOURCES.txt
