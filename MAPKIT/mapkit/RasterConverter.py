@@ -172,8 +172,8 @@ class RasterConverter(object):
     
     def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', rasterType='discrete', alpha=1.0, documentName='default'):
         '''
-        Creates a KML file where adjacent cells with the same value are clustered together into a single polygon.
-        The result is a vector cluster representation.
+        Creates a KML file where adjacent cells with the same value are clustered together into a polygons.
+        The result is a vector representation of each cluster.
         '''
         
         if not (alpha >= 0 and alpha <= 1.0):
@@ -278,7 +278,6 @@ class RasterConverter(object):
                 valueData = ET.SubElement(extendedData, 'Data', name='value')
                 valueValue = ET.SubElement(valueData, 'value')
                 valueValue.text = str(value)
-                
                 
         return ET.tostring(kml)
 
