@@ -294,7 +294,12 @@ class RasterConverter(object):
         
         # Zip KML wrapper file and png together with extension kmz
         
-        
+    def getAsKmlTimeSeries(self):
+        '''
+        Get a set of rasters as a kml time series
+        '''
+    
+       
     def setColorRamp(self, colorRamp=None):
         '''
         Set the color ramp of the raster converter instance
