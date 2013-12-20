@@ -34,8 +34,8 @@ kmlString = gsshapyConverter.getAsKmlClusters(tableName=tableName,
                                               documentName=name)
 
 with open(path, 'w') as f:
-    pretty = xml.dom.minidom.parseString(kmlString)
-    f.write(pretty.toprettyxml())
-#     f.write(kmlString)
+#     pretty = xml.dom.minidom.parseString(kmlString)
+#     f.write(pretty.toprettyxml())
+    f.write(kmlString)
 
 print 'KML CONVERSION TIME:', time.time()-start

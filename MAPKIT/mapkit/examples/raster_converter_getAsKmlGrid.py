@@ -23,7 +23,7 @@ colorRamp = RasterConverter.generateCustomColorRamp(colors, 10)
 converter.setColorRamp(colorRamp)
             
 tableName = 'netcdf_raster'
-name = 'NETCDF TEST'
+name = 'NetCDF Test'
 path = '/Users/swainn/projects/netcdf_to_kml/netcdf.kml'
 
 
@@ -33,8 +33,7 @@ start = time.time()
 kmlString = converter.getAsKmlGrid(tableName=tableName,
                                    rasterId=3,
                                    rasterIdFieldName='rid',
-                                   name=name,
-                                   rasterType='continuous',
+                                   documentName=name,
                                    alpha=0.7)
 
 with open(path, 'w') as f:
