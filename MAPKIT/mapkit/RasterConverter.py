@@ -44,7 +44,8 @@ class RasterConverter(object):
     def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
         '''
         Creates a KML file with each cell in the raster represented by a polygon. The
-        result is a vector grid representation of the raster
+        result is a vector grid representation of the raster.  Note that pixels with values between -1 and 0
+        are omitted as no data values. Also note that this method only works on the first band.
         '''
             
         if not (alpha >= 0 and alpha <= 1.0):
@@ -67,6 +68,32 @@ class RasterConverter(object):
         for row in result:
             minValue = row.min
             maxValue = row.max
+            
+        # Set the no data value if min is -1 or 0
+        if ((float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN)):
+            statement = '''
+                        UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
+                        WHERE {2} = {3};
+                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, float(minValue))
+            
+            self._session.execute(statement)
+            
+            # Pull the stats again with no data value set
+            statement = '''
+                    SELECT {2}, (stats).min, (stats).max
+                    FROM (
+                    SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
+                    FROM {1}
+                    WHERE {2}={3}
+                    ) As foo;
+                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
+             
+            result = self._session.execute(statement)
+            
+            # extract the stats
+            for row in result:
+                minValue = row.min
+                maxValue = row.max
             
         # Map color ramp indicies to values
         colorRamp = self._colorRamp
@@ -101,12 +128,18 @@ class RasterConverter(object):
         
         # Add polygons to the kml file with styling
         for row in result:
-            value = float(row.val)
+            # Value will be None if it is a no data value
+            if (row.val):
+                value = float(row.val)
+            else:
+                value = None
+            
             polygonString = row.polygon
             i = int(row.x)
             j = int(row.y)
             
-            if ((float(value) > RasterConverter.NO_DATA_VALUE_MAX) or (float(value) < RasterConverter.NO_DATA_VALUE_MIN)):
+            # Only create placemarks for values that are no data values
+            if (value):
                 # Create a new placemark for each group of values
                 if (value != groupValue):
                     placemark = ET.SubElement(document, 'Placemark')
@@ -172,8 +205,8 @@ class RasterConverter(object):
     def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
         '''
         Creates a KML file where adjacent cells with the same value are clustered together into a polygons.
-        The result is a vector representation of each cluster. Note that cells with values between -1 and 0
-        are omitted as no data values.
+        The result is a vector representation of each cluster. Note that pixels with values between -1 and 0
+        are omitted as no data values. Also note that this method only works on the first band.
         '''
         
         if not (alpha >= 0 and alpha <= 1.0):
@@ -196,6 +229,32 @@ class RasterConverter(object):
         for row in result:
             minValue = row.min
             maxValue = row.max
+            
+        # Set the no data value if min is -1 or 0
+        if ((float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN)):
+            statement = '''
+                        UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
+                        WHERE {2} = {3};
+                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, float(minValue))
+            
+            self._session.execute(statement)
+            
+            # Pull the stats again with no data value set
+            statement = '''
+                    SELECT {2}, (stats).min, (stats).max
+                    FROM (
+                    SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
+                    FROM {1}
+                    WHERE {2}={3}
+                    ) As foo;
+                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
+             
+            result = self._session.execute(statement)
+            
+            # extract the stats
+            for row in result:
+                minValue = row.min
+                maxValue = row.max
             
         # Map color ramp indicies to values
         colorRamp = self._colorRamp
@@ -230,10 +289,15 @@ class RasterConverter(object):
         
         # Add polygons to the kml file with styling
         for row in result:
-            value = float(row.val)
+            # Value will be None if it is a no data value
+            if (row.val):
+                value = float(row.val)
+            else:
+                value = None
+            
             polygonString = row.polygon
             
-            if ((float(value) > RasterConverter.NO_DATA_VALUE_MAX) or (float(value) < RasterConverter.NO_DATA_VALUE_MIN)):
+            if (value):
                 # Create a new placemark for each group of values
                 if (value != groupValue):
                     placemark = ET.SubElement(document, 'Placemark')
@@ -288,6 +352,11 @@ class RasterConverter(object):
                 multigeometry.append(polygon)
                 
         return ET.tostring(kml)
+    
+    def getAsKmlPng(self):
+        '''
+        Creates a KML wrapper for the raster exported as a PNG.
+        '''
 
     
     def setColorRamp(self, colorRamp=None):
