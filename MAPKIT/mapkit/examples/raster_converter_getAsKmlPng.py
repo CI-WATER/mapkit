@@ -15,20 +15,18 @@ gsshapySession = gsshapySessionMaker()
 # Initialize raster converter
 gsshapyConverter = RasterConverter(sqlAlchemySession=gsshapySession)
 
-# Configure RasterConverter instance with custom color ramp
+# Configure RasterConverter instance
 colors = [(255, 0, 0),(0, 255, 0),(0, 0, 255)]
 gsshapyConverter.setCustomColorRamp(colors, 10)
     
 tableName = 'idx_index_maps'
 name = 'Soils Index Maps'
-path = '/Users/swainn/projects/post_gis/soil_cluster.kml'
+path = '/Users/swainn/projects/post_gis/soil_png.kml'
 
 # Start timer
 start = time.time()
 
-kmlString = gsshapyConverter.getAsKmlClusters(tableName=tableName, 
-                                              rasterId=2,
-                                              documentName=name)
+kmlString = gsshapyConverter.getAsKmlPng()
 
 with open(path, 'w') as f:
 #     pretty = xml.dom.minidom.parseString(kmlString)

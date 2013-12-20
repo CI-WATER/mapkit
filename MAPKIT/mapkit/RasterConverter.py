@@ -37,7 +37,7 @@ class RasterConverter(object):
         self._session = sqlAlchemySession
         
         if not colorRamp:
-            self._colorRamp = RasterConverter.generateDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
+            self.setDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
         else:
             self._colorRamp = colorRamp
 
@@ -255,6 +255,7 @@ class RasterConverter(object):
         '''
         Creates a KML wrapper for the raster exported as a PNG.
         '''
+        
 
     
     def setColorRamp(self, colorRamp=None):
@@ -262,12 +263,11 @@ class RasterConverter(object):
         Set the color ramp of the raster converter instance
         '''
         if not colorRamp:
-            self._colorRamp = RasterConverter.generateDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
+            self._colorRamp = RasterConverter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
         else:
             self._colorRamp = colorRamp
-         
-    @classmethod       
-    def generateDefaultColorRamp(cls, ramp=COLOR_RAMP_HUE):
+              
+    def setDefaultColorRamp(self, ramp=COLOR_RAMP_HUE):
         '''
         Returns the color ramp as a list of RGB tuples
         '''
@@ -290,15 +290,14 @@ class RasterConverter(object):
                 (0, 36, 143), (0, 32, 134), (0, 29, 125), (0, 25, 115), (0, 21, 106), (0, 18, 97), (0, 14, 88), (0, 10, 78), (0, 7, 69), (0, 3, 60), (0, 0, 51)]                                    # navy blue to dark navy blue
         
            
-        if (ramp == cls.COLOR_RAMP_HUE):
-            return hue
-        elif (ramp == cls.COLOR_RAMP_TERRAIN):
-            return terrain
-        elif (ramp == cls.COLOR_RAMP_AQUA):
-            return aqua
+        if (ramp == self.COLOR_RAMP_HUE):
+            self._colorRamp = hue
+        elif (ramp == self.COLOR_RAMP_TERRAIN):
+            self._colorRamp = terrain
+        elif (ramp == self.COLOR_RAMP_AQUA):
+            self._colorRamp = aqua
 
-    @classmethod
-    def generateCustomColorRamp(cls, colors=[], interpolatedPoints=10):
+    def setCustomColorRamp(self, colors=[], interpolatedPoints=10):
         '''
         Accepts a list of RGB tuples and interpolates between them to create a custom color ramp.
         Returns the color ramp as a list of RGB tuples.
@@ -337,7 +336,7 @@ class RasterConverter(object):
         # Append the last color
         colorRamp.append(colors[-1])
                 
-        return colorRamp
+        self._colorRamp = colorRamp
 
     def getColorRampInterpolationParameters(self, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha):
         '''

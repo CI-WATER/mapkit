@@ -8,33 +8,25 @@ import xml.dom.minidom
 import time
 
 # Setup SQLAlchemy connection
-engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gis')
+engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postgis')
 Session = sessionmaker(bind=engine)
 session = Session()
 
 # Initialize raster converter
 converter = RasterConverter(sqlAlchemySession=session)
-
-# Configure RasterConverter instance
-colors = [(255, 0, 0),(0, 255, 0),(0, 0, 255)]
-colorRamp = RasterConverter.generateCustomColorRamp(colors, 10)
-
-# colorRamp = RasterConverter.generateDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
-converter.setColorRamp(colorRamp)
+converter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_TERRAIN)
             
-tableName = 'netcdf_raster'
-name = 'NetCDF Test'
-path = '/Users/swainn/projects/netcdf_to_kml/netcdf.kml'
+tableName = 'raster_maps'
+name = 'Park City Elevation'
+path = '/Users/swainn/projects/post_gis/ele_terrain.kml'
 
 
 # Start timer
 start = time.time()
 
 kmlString = converter.getAsKmlGrid(tableName=tableName,
-                                   rasterId=3,
-                                   rasterIdFieldName='rid',
-                                   documentName=name,
-                                   alpha=0.7)
+                                   rasterId=2,
+                                   documentName=name)
 
 with open(path, 'w') as f:
 #     pretty = xml.dom.minidom.parseString(kmlString)
