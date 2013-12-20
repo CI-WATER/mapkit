@@ -43,68 +43,17 @@ class RasterConverter(object):
 
     def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
         '''
-        Creates a KML file with each cell in the raster represented by a polygon. The
-        result is a vector grid representation of the raster.  Note that pixels with values between -1 and 0
-        are omitted as no data values. Also note that this method only works on the first band.
+        Creates a KML file with each cell in the raster represented by a polygon. The result is a vector grid representation of the raster. 
+        Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
+        Returns the kml document as a string.
         '''
-            
+        # Validate alpha
         if not (alpha >= 0 and alpha <= 1.0):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
             raise
         
-        # Get min and max for raster band 1
-        statement = '''
-                    SELECT {2}, (stats).min, (stats).max
-                    FROM (
-                    SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
-                    FROM {1}
-                    WHERE {2}={3}
-                    ) As foo;
-                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-             
-        result = self._session.execute(statement)
-        
-        # extract the stats
-        for row in result:
-            minValue = row.min
-            maxValue = row.max
-            
-        # Set the no data value if min is -1 or 0
-        if ((float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN)):
-            statement = '''
-                        UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
-                        WHERE {2} = {3};
-                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, float(minValue))
-            
-            self._session.execute(statement)
-            
-            # Pull the stats again with no data value set
-            statement = '''
-                    SELECT {2}, (stats).min, (stats).max
-                    FROM (
-                    SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
-                    FROM {1}
-                    WHERE {2}={3}
-                    ) As foo;
-                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-             
-            result = self._session.execute(statement)
-            
-            # extract the stats
-            for row in result:
-                minValue = row.min
-                maxValue = row.max
-            
-        # Map color ramp indicies to values
-        colorRamp = self._colorRamp
-        minRampIndex = 0.0 # Always zero
-        maxRampIndex = float(len(colorRamp)-1)
-        
-        # Map color ramp indices to values using equation of a line
-        # Resulting equation will be:
-        # rampIndex = slope * value + intercept
-        slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
-        intercept = maxRampIndex - (slope * maxValue)
+        # Get color ramp and interpolation parameters
+        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
         
         # Get polygons for each cell in kml format
         statement = '''
@@ -204,68 +153,17 @@ class RasterConverter(object):
     
     def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
         '''
-        Creates a KML file where adjacent cells with the same value are clustered together into a polygons.
-        The result is a vector representation of each cluster. Note that pixels with values between -1 and 0
-        are omitted as no data values. Also note that this method only works on the first band.
+        Creates a KML file where adjacent cells with the same value are clustered together into a polygons. The result is a vector representation 
+        of each cluster. Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
+        Returns the kml document as a string.
         '''
         
         if not (alpha >= 0 and alpha <= 1.0):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
             raise
         
-        # Get min and max for raster band 1
-        statement = '''
-                    SELECT {2}, (stats).min, (stats).max
-                    FROM (
-                    SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
-                    FROM {1}
-                    WHERE {2}={3}
-                    ) As foo;
-                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-             
-        result = self._session.execute(statement)
-        
-        # extract the stats
-        for row in result:
-            minValue = row.min
-            maxValue = row.max
-            
-        # Set the no data value if min is -1 or 0
-        if ((float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN)):
-            statement = '''
-                        UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
-                        WHERE {2} = {3};
-                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, float(minValue))
-            
-            self._session.execute(statement)
-            
-            # Pull the stats again with no data value set
-            statement = '''
-                    SELECT {2}, (stats).min, (stats).max
-                    FROM (
-                    SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
-                    FROM {1}
-                    WHERE {2}={3}
-                    ) As foo;
-                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-             
-            result = self._session.execute(statement)
-            
-            # extract the stats
-            for row in result:
-                minValue = row.min
-                maxValue = row.max
-            
-        # Map color ramp indicies to values
-        colorRamp = self._colorRamp
-        minRampIndex = 0.0 # Always zero
-        maxRampIndex = float(len(colorRamp)-1)
-        
-        # Map color ramp indices to values using equation of a line
-        # Resulting equation will be:
-        # rampIndex = slope * value + intercept
-        slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
-        intercept = maxRampIndex - (slope * maxValue)
+        # Get color ramp and interpolation parameters
+        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
         
         # Get a set of polygons representing cluster of adjacent cells with the same value
         statement = '''
@@ -440,6 +338,65 @@ class RasterConverter(object):
         colorRamp.append(colors[-1])
                 
         return colorRamp
+
+    def getColorRampInterpolationParameters(self, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha):
+        '''
+        Creates color ramp based on min and max values of raster pixels. If pixel value is one of the no data values
+        it will be excluded in the color ramp interpolation. Returns colorRamp, slope, intercept
+        '''
+        # Get min and max for raster band 1
+        statement = '''
+                SELECT {2}, (stats).min, (stats).max
+                FROM (
+                SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
+                FROM {1}
+                WHERE {2}={3}
+                ) As foo;
+                '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
+        result = self._session.execute(statement)
+        
+        # extract the stats
+        for row in result:
+            minValue = row.min
+            maxValue = row.max
+        
+        # Set the no data value if min is -1 or 0
+        if ((float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN)):
+            statement = '''
+                    UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
+                    WHERE {2} = {3};
+                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, float(minValue))
+            self._session.execute(statement)
+            
+            # Pull the stats again with no data value set
+            statement = '''
+                SELECT {2}, (stats).min, (stats).max
+                FROM (
+                SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
+                FROM {1}
+                WHERE {2}={3}
+                ) As foo;
+                '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
+            result = self._session.execute(statement)
+            
+            # extract the stats
+            for row in result:
+                minValue = row.min
+                maxValue = row.max
+        
+        # Map color ramp indicies to values
+        colorRamp = self._colorRamp
+        minRampIndex = 0.0 # Always zero
+        maxRampIndex = float(len(colorRamp) - 1) # Map color ramp indices to values using equation of a line
+        
+        # Resulting equation will be:
+        # rampIndex = slope * value + intercept
+        slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
+        intercept = maxRampIndex - (slope * maxValue)
+        
+        # Return color ramp, slope, and intercept to interpolate by value
+        return colorRamp, slope, intercept
+
             
         
         
