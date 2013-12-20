@@ -26,11 +26,13 @@ path = '/Users/swainn/projects/post_gis/soil_png.kml'
 # Start timer
 start = time.time()
 
-kmlString = gsshapyConverter.getAsKmlPng()
+kmlString = gsshapyConverter.getAsKmlPng(tableName=tableName, 
+                                         rasterId=2,
+                                         documentName=name)
 
-with open(path, 'w') as f:
-#     pretty = xml.dom.minidom.parseString(kmlString)
-#     f.write(pretty.toprettyxml())
-    f.write(kmlString)
+# with open(path, 'w') as f:
+# #     pretty = xml.dom.minidom.parseString(kmlString)
+# #     f.write(pretty.toprettyxml())
+#     f.write(kmlString)
 
 print 'KML CONVERSION TIME:', time.time()-start

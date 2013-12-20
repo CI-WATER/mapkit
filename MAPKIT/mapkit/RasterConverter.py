@@ -251,13 +251,50 @@ class RasterConverter(object):
                 
         return ET.tostring(kml)
     
-    def getAsKmlPng(self):
+    def getAsKmlPng(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
         '''
         Creates a KML wrapper for the raster exported as a PNG.
         '''
         
-
-    
+        # Get the color ramp and parameters
+        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
+        
+        # Use ST_ValueCount to get all unique values 
+        
+        # Use the color ramp, slope, intercept and value to look up rbg for each value
+        
+        # Create custom ramp string in the postgis format for the png
+        rampString = '''3 0 0 0 255
+                        2 100 50 55 255
+                        1 150 100 150 255
+                        nv 0 0 0 0'''
+        
+        # Get a PNG representation of the raster
+        statement = '''
+                    SELECT ST_AsPNG(ST_Transform(ST_ColorMap({0}, 1, '{4}'), 4326, 'Bilinear')) As png
+                    FROM {1}
+                    WHERE {2}={3};
+                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, rampString)
+                    
+        result = self._session.execute(statement)
+        
+        for row in result:
+            binaryPNG = row.png
+        
+        # Write PNG to file in some temp location
+        path = '/Users/swainn/projects/post_gis/test.png'
+        with open(path, 'wb') as f:
+            f.write(binaryPNG)
+            
+        # Determine extents for the KML wrapper file via query
+        
+        
+        # Create KML wrapper
+        
+        
+        # Zip KML wrapper file and png together with extension kmz
+        
+        
     def setColorRamp(self, colorRamp=None):
         '''
         Set the color ramp of the raster converter instance
