@@ -7,8 +7,9 @@
 * License: BSD 2-Clause
 ********************************************************************************
 '''
-import math
+import math, os
 import xml.etree.ElementTree as ET
+from zipfile import ZipFile
 
 
 class RasterConverter(object):
@@ -251,10 +252,16 @@ class RasterConverter(object):
                 
         return ET.tostring(kml)
     
-    def getAsKmlPng(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
+    def getAsKmlPng(self, outpath, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default', drawOrder=0):
         '''
         Creates a KML wrapper for the raster exported as a PNG.
         '''
+        # Extract path components
+        directory = os.path.dirname(outpath)
+        archiveName = os.path.split(outpath)[1].split('.')[0]
+        pngFilename = archiveName + '.png'
+        kmzFilename = archiveName + '.kmz'
+        kmlFilename = archiveName + '.kml'
         
         # Get the color ramp and parameters
         colorRamp, slope, intercept = self.getColorRampInterpolationParameters(tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
@@ -293,19 +300,87 @@ class RasterConverter(object):
         
         for row in result:
             binaryPNG = row.png
-        
-        # Write PNG to file in some temp location
-        path = '/Users/swainn/projects/post_gis/test.png'
-        with open(path, 'wb') as f:
-            f.write(binaryPNG)
             
         # Determine extents for the KML wrapper file via query
+        statement = '''
+                    SELECT (foo.metadata).*
+                    FROM (
+                    SELECT ST_MetaData({0}) as metadata 
+                    FROM {1}
+                    WHERE {2}={3}
+                    ) As foo;
+                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
+        
+        result = self._session.execute(statement)
+        
+        for row in result:
+            upperLeftY = row.upperlefty
+            scaleY = row.scaley
+            height = row.height
+            
+            upperLeftX = row.upperleftx
+            scaleX = row.scalex
+            width = row.width
+        
+        north = upperLeftY
+        south = upperLeftY + (scaleY * height)
+        east = upperLeftX + (scaleX * width)
+        west = upperLeftX
+        
+        # Initialize KML Document            
+        kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
+        document = ET.SubElement(kml, 'Document')
+        docName = ET.SubElement(document, 'name')
+        docName.text = documentName
+        
+        # GroundOverlay
+        groundOverlay = ET.SubElement(document, 'GroundOverlay')
+        overlayName = ET.SubElement(groundOverlay, 'name')
+        overlayName.text = 'Layer 1'
+        
+        # DrawOrder
+        drawOrderElement = ET.SubElement(groundOverlay, 'drawOrder')
+        drawOrderElement.text = str(drawOrder)
+        
+        # Href to PNG
+        iconElement = ET.SubElement(groundOverlay, 'Icon')
+        hrefElement = ET.SubElement(iconElement, 'href')
+        hrefElement.text = pngFilename
+        
+        # LatLonBox
+        latLonBox = ET.SubElement(groundOverlay, 'LatLonBox')
+        
+        northElement = ET.SubElement(latLonBox, 'north')
+        northElement.text = str(north)
+        
+        southElement = ET.SubElement(latLonBox, 'south')
+        southElement.text = str(south)
+        
+        eastElement = ET.SubElement(latLonBox, 'east')
+        eastElement.text = str(east)
+        
+        westElement = ET.SubElement(latLonBox, 'west')
+        westElement.text = str(west)
         
         
-        # Create KML wrapper
+        # Write PNG to file
+        pngPath = os.path.join(directory, pngFilename)
         
+#         with open(pngPath, 'wb') as f:
+#             f.write(binaryPNG)
+            
+        # Create zipfile
+        kmzPath = os.path.join(directory, kmzFilename)
         
-        # Zip KML wrapper file and png together with extension kmz
+        kmlArchivePath = os.path.join(archiveName, kmlFilename)
+        pngArchivePath = os.path.join(archiveName, pngFilename)
+        
+        with ZipFile(kmzPath, 'w') as kmz:
+            kmz.writestr(kmlArchivePath, ET.tostring(kml))
+            kmz.writestr(pngArchivePath, binaryPNG)
+        
+        return ET.tostring(kml), binaryPNG
+
         
     def getAsKmlTimeSeries(self):
         '''

@@ -27,7 +27,8 @@ path = '/Users/swainn/projects/post_gis/soil_png.kml'
 # Start timer
 start = time.time()
 
-kmlString = gsshapyConverter.getAsKmlPng(tableName=tableName, 
+kmlString = gsshapyConverter.getAsKmlPng(outpath=path,
+                                         tableName=tableName, 
                                          rasterId=2,
                                          documentName=name)
 
