@@ -16,9 +16,9 @@ gsshapySession = gsshapySessionMaker()
 gsshapyConverter = RasterConverter(sqlAlchemySession=gsshapySession)
 
 # Configure RasterConverter instance
-# colors = [(255, 0, 0),(0, 255, 0),(0, 0, 255)]
-# gsshapyConverter.setCustomColorRamp(colors, 10)
-gsshapyConverter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_AQUA)
+colors = [(255, 0, 0),(0, 255, 0),(0, 0, 255)]
+gsshapyConverter.setCustomColorRamp(colors, 2)
+# gsshapyConverter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
     
 tableName = 'idx_index_maps'
 name = 'Soils Index Maps'

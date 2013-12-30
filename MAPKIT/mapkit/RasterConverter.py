@@ -254,7 +254,8 @@ class RasterConverter(object):
     
     def getAsKmlPng(self, outpath, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default', drawOrder=0):
         '''
-        Creates a KML wrapper for the raster exported as a PNG.
+        Creates a KML wrapper for the raster exported as a PNG. The color ramp used to generate the PNG is
+        embedded in the ExtendedData tag of the GroundOverlay.
         '''
         # Extract path components
         directory = os.path.dirname(outpath)
@@ -275,18 +276,20 @@ class RasterConverter(object):
                     '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
                     
         result = self._session.execute(statement)
-        
-        rampString = ''
+        rampList = []
         
         # Use the color ramp, slope, intercept and value to look up rbg for each value
         for row in result:
             value = row.value
             rampIndex = math.trunc(slope * float(value) + intercept)
             rgb = colorRamp[rampIndex]
-            rampString += '{0} {1} {2} {3}\n'.format(value, rgb[0], rgb[1], rgb[2])
+            rampList.append('{0} {1} {2} {3} {4}'.format(value, rgb[0], rgb[1], rgb[2], int(alpha * 255)))
         
         # Add a line for the no-data values (nv)
-        rampString += 'nv 0 0 0 0'
+        rampList.append('nv 0 0 0 0')
+        
+        # Join strings in list to create ramp
+        rampString = '\n'.join(rampList)
         print rampString
         
         # Get a PNG representation of the raster
@@ -305,7 +308,7 @@ class RasterConverter(object):
         statement = '''
                     SELECT (foo.metadata).*
                     FROM (
-                    SELECT ST_MetaData({0}) as metadata 
+                    SELECT ST_MetaData(ST_Transform({0}, 4326, 'Bilinear')) as metadata 
                     FROM {1}
                     WHERE {2}={3}
                     ) As foo;
@@ -361,14 +364,29 @@ class RasterConverter(object):
         
         westElement = ET.SubElement(latLonBox, 'west')
         westElement.text = str(west)
-        
-        
-        # Write PNG to file
-        pngPath = os.path.join(directory, pngFilename)
-        
-#         with open(pngPath, 'wb') as f:
-#             f.write(binaryPNG)
+
+        # Append ramp to kml file for reference later
+        extendedDataElement = ET.SubElement(groundOverlay, 'ExtendedData')
+        for ramp in rampList:
+            dataElement = ET.SubElement(extendedDataElement, 'Data', name='vrgba')
+            dataValueElement = ET.SubElement(dataElement, 'value')
+            dataValueElement.text = ramp
             
+        # Write PNG to file (for debugging)
+        pngPath = os.path.join(directory, pngFilename)
+         
+        with open(pngPath, 'wb') as f:
+            f.write(binaryPNG)
+
+        # Write KML to file (for debugging)
+        kmlPath = os.path.join(directory, kmlFilename)
+        
+        import xml.dom.minidom
+        
+        with open(kmlPath, 'w') as k:
+            pretty = xml.dom.minidom.parseString(ET.tostring(kml))
+            k.write(pretty.toprettyxml())
+
         # Create zipfile
         kmzPath = os.path.join(directory, kmzFilename)
         
