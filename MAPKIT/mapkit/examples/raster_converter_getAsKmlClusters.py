@@ -18,6 +18,7 @@ gsshapyConverter = RasterConverter(sqlAlchemySession=gsshapySession)
 # Configure RasterConverter instance with custom color ramp
 colors = [(255, 0, 0),(0, 255, 0),(0, 0, 255)]
 gsshapyConverter.setCustomColorRamp(colors, 10)
+
     
 tableName = 'idx_index_maps'
 name = 'Soils Index Maps'

@@ -259,15 +259,28 @@ class RasterConverter(object):
         # Get the color ramp and parameters
         colorRamp, slope, intercept = self.getColorRampInterpolationParameters(tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
         
-        # Use ST_ValueCount to get all unique values 
+        # Use ST_ValueCount to get all unique values
+        statement = '''
+                    SELECT (pvc).*
+                    FROM (SELECT ST_ValueCount({0}) As pvc
+                        FROM {1} WHERE {2}={3}) As foo
+                        ORDER BY (pvc).value DESC;
+                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
+                    
+        result = self._session.execute(statement)
+        
+        rampString = ''
         
         # Use the color ramp, slope, intercept and value to look up rbg for each value
+        for row in result:
+            value = row.value
+            rampIndex = math.trunc(slope * float(value) + intercept)
+            rgb = colorRamp[rampIndex]
+            rampString += '{0} {1} {2} {3}\n'.format(value, rgb[0], rgb[1], rgb[2])
         
-        # Create custom ramp string in the postgis format for the png
-        rampString = '''3 0 0 0 255
-                        2 100 50 55 255
-                        1 150 100 150 255
-                        nv 0 0 0 0'''
+        # Add a line for the no-data values (nv)
+        rampString += 'nv 0 0 0 0'
+        print rampString
         
         # Get a PNG representation of the raster
         statement = '''
