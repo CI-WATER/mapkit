@@ -7,10 +7,8 @@
 * License: BSD 2-Clause
 ********************************************************************************
 '''
-import math, os
+import math
 import xml.etree.ElementTree as ET
-from zipfile import ZipFile
-
 
 class RasterConverter(object):
     '''
@@ -252,18 +250,14 @@ class RasterConverter(object):
                 
         return ET.tostring(kml)
     
-    def getAsKmlPng(self, outpath, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default', drawOrder=0):
+    def getAsKmlPng(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default', drawOrder=0):
         '''
-        Creates a KML wrapper for the raster exported as a PNG. The color ramp used to generate the PNG is
-        embedded in the ExtendedData tag of the GroundOverlay.
+        Creates a KML wrapper and PNG representat of the raster. Returns a string of the kml file contents and
+        a binary string of the PNG contents. The color ramp used to generate the PNG is embedded in the ExtendedData 
+        tag of the GroundOverlay.
+        IMPORTANT: The PNG image is referenced in the kml as 'raster.png', thus it must be written to file with that 
+        name for the kml to recognize it.
         '''
-        # Extract path components
-        directory = os.path.dirname(outpath)
-        archiveName = os.path.split(outpath)[1].split('.')[0]
-        pngFilename = archiveName + '.png'
-        kmzFilename = archiveName + '.kmz'
-        kmlFilename = archiveName + '.kml'
-        
         # Get the color ramp and parameters
         colorRamp, slope, intercept = self.getColorRampInterpolationParameters(tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
         
@@ -339,16 +333,33 @@ class RasterConverter(object):
         # GroundOverlay
         groundOverlay = ET.SubElement(document, 'GroundOverlay')
         overlayName = ET.SubElement(groundOverlay, 'name')
-        overlayName.text = 'Layer 1'
+        overlayName.text = 'Overlay'
         
         # DrawOrder
         drawOrderElement = ET.SubElement(groundOverlay, 'drawOrder')
         drawOrderElement.text = str(drawOrder)
         
+        # Define Region
+        regionElement = ET.SubElement(groundOverlay, 'Region')
+        latLonBox = ET.SubElement(regionElement, 'LatLonBox')
+        
+        northElement = ET.SubElement(latLonBox, 'north')
+        northElement.text = str(north)
+        
+        southElement = ET.SubElement(latLonBox, 'south')
+        southElement.text = str(south)
+        
+        eastElement = ET.SubElement(latLonBox, 'east')
+        eastElement.text = str(east)
+        
+        westElement = ET.SubElement(latLonBox, 'west')
+        westElement.text = str(west)
+        
+        
         # Href to PNG
         iconElement = ET.SubElement(groundOverlay, 'Icon')
         hrefElement = ET.SubElement(iconElement, 'href')
-        hrefElement.text = pngFilename
+        hrefElement.text = 'raster.png'
         
         # LatLonBox
         latLonBox = ET.SubElement(groundOverlay, 'LatLonBox')
@@ -371,31 +382,6 @@ class RasterConverter(object):
             dataElement = ET.SubElement(extendedDataElement, 'Data', name='vrgba')
             dataValueElement = ET.SubElement(dataElement, 'value')
             dataValueElement.text = ramp
-            
-        # Write PNG to file (for debugging)
-        pngPath = os.path.join(directory, pngFilename)
-         
-        with open(pngPath, 'wb') as f:
-            f.write(binaryPNG)
-
-        # Write KML to file (for debugging)
-        kmlPath = os.path.join(directory, kmlFilename)
-        
-        import xml.dom.minidom
-        
-        with open(kmlPath, 'w') as k:
-            pretty = xml.dom.minidom.parseString(ET.tostring(kml))
-            k.write(pretty.toprettyxml())
-
-        # Create zipfile
-        kmzPath = os.path.join(directory, kmzFilename)
-        
-        kmlArchivePath = os.path.join(archiveName, kmlFilename)
-        pngArchivePath = os.path.join(archiveName, pngFilename)
-        
-        with ZipFile(kmzPath, 'w') as kmz:
-            kmz.writestr(kmlArchivePath, ET.tostring(kml))
-            kmz.writestr(pngArchivePath, binaryPNG)
         
         return ET.tostring(kml), binaryPNG
 
