@@ -396,13 +396,6 @@ class RasterConverter(object):
             dataValueElement.text = ramp
         
         return ET.tostring(kml), binaryPNG
-
-        
-    def getAsKmlTimeSeries(self):
-        '''
-        Get a set of rasters as a kml time series
-        '''
-    
        
     def setColorRamp(self, colorRamp=None):
         '''

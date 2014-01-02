@@ -32,6 +32,11 @@ class RasterLoader(object):
         
 
     def rasterToWKB(self, rasterPath, srid, noData):
+        '''
+        Accepts a raster file and converts it to Well Known Binary text using the raster2pgsql
+        executable that comes with PostGIS. This is the format that rasters are stored in a
+        PostGIS database.
+        '''
         raster2pgsqlProcess = subprocess.Popen([self._raster2pgsql,
                                                 '-s', srid, 
                                                 '-N', noData, 

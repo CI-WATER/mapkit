@@ -1,5 +1,5 @@
 ***********************************************
-* MapKit
+* MapKit 0.0.3
 * Author: Nathan Swain
 * Copyright: (c) Brigham Young University 2013
 * License: BSD 2-Clause
