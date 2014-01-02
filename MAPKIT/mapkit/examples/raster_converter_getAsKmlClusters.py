@@ -1,6 +1,5 @@
 from mapkit.RasterConverter import RasterConverter
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 # For pretty print functionality for debugging
 # not recommended for production
@@ -8,27 +7,25 @@ import xml.dom.minidom
 import time
 
 # Setup SQLAlchemy connection
-gsshapyEngine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postgis')
-gsshapySessionMaker = sessionmaker(bind=gsshapyEngine)
-gsshapySession = gsshapySessionMaker()
+engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postgis')
+
+tableName = 'map_kit_rasters'
+rasterId = 5
+name = 'Soils Index Map Clusters'
+path = '/Users/swainn/projects/post_gis/map_kit_rasters/soil_cluster.kml'
 
 # Initialize raster converter
-gsshapyConverter = RasterConverter(sqlAlchemySession=gsshapySession)
+converter = RasterConverter(sqlAlchemyEngine=engine)
 
 # Configure RasterConverter instance with custom color ramp
 colors = [(255, 0, 0),(0, 255, 0),(0, 0, 255)]
-gsshapyConverter.setCustomColorRamp(colors, 10)
-
-    
-tableName = 'idx_index_maps'
-name = 'Soils Index Maps'
-path = '/Users/swainn/projects/post_gis/soil_cluster.kml'
+converter.setCustomColorRamp(colors, 10)
 
 # Start timer
 start = time.time()
 
-kmlString = gsshapyConverter.getAsKmlClusters(tableName=tableName, 
-                                              rasterId=2,
+kmlString = converter.getAsKmlClusters(tableName=tableName, 
+                                              rasterId=rasterId,
                                               documentName=name)
 
 with open(path, 'w') as f:

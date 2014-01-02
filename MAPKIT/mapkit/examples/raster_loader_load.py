@@ -5,12 +5,12 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
 # Setup SQLAlchemy connection
-gsshapyEngine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postgis')
-gsshapySessionMaker = sessionmaker(bind=gsshapyEngine)
+engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postgis')
+gsshapySessionMaker = sessionmaker(bind=engine)
 session = gsshapySessionMaker()
 
 # Initialize raster converter
-loader = RasterLoader(engine=gsshapyEngine,
+loader = RasterLoader(engine=engine,
                       raster2pgsql='/Applications/Postgres93.app/Contents/MacOS/bin/raster2pgsql')
 
 # Create list of dictionaries with the raster information rasters to load

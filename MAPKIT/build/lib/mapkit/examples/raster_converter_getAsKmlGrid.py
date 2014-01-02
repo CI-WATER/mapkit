@@ -1,6 +1,5 @@
 from mapkit.RasterConverter import RasterConverter
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 # For pretty print functionality for debugging
 # not recommended for production
@@ -9,23 +8,23 @@ import time
 
 # Setup SQLAlchemy connection
 engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postgis')
-Session = sessionmaker(bind=engine)
-session = Session()
+            
+tableName = 'map_kit_rasters'
+rasterId = 5
+name = 'Soils Index Map Gridded'
+path = '/Users/swainn/projects/post_gis/map_kit_rasters/soil_gridded.kml'
 
 # Initialize raster converter
-converter = RasterConverter(sqlAlchemySession=session)
-converter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_TERRAIN)
-            
-tableName = 'raster_maps'
-name = 'Park City Elevation'
-path = '/Users/swainn/projects/post_gis/ele_terrain.kml'
-
+converter = RasterConverter(sqlAlchemyEngine=engine)
+colors = [(255, 0, 0),(0, 255, 0),(0, 0, 255)]
+converter.setCustomColorRamp(colors, 10)
+# converter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_TERRAIN)
 
 # Start timer
 start = time.time()
 
 kmlString = converter.getAsKmlGrid(tableName=tableName,
-                                   rasterId=2,
+                                   rasterId=rasterId,
                                    documentName=name)
 
 with open(path, 'w') as f:

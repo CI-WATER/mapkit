@@ -10,7 +10,7 @@
 
 import subprocess, os, datetime
 
-from RasterTable import RasterTable
+from MapKitRaster import MapKitRaster
 from mapkit import Base
 
 from sqlalchemy.orm import sessionmaker
@@ -36,6 +36,12 @@ class RasterLoader(object):
         Returns the ids of the rasters loaded successfully in the same order
         as the list passed in.
         '''
+        # Create table if necessary
+        Base.metadata.create_all(self._engine)
+            
+        # Create a session
+        Session = sessionmaker(bind=self._engine)
+        session = Session()
         
         for raster in rasters:
             # Must read in using the raster2pgsql commandline tool.
@@ -89,38 +95,19 @@ class RasterLoader(object):
             
             # Get the filename
             filename = os.path.split(rasterPath)[1]
-            
-#             # Construct statement
-#             if 'timestamp' in raster:
-#                 timestamp = raster['timestamp']
-#                 
-#                 statement = '''
-#                             BEGIN;
-#                             CREATE TABLE IF NOT EXISTS "{0}" ("id" serial PRIMARY KEY, "raster" raster,"filename" text, "timestamp" timestamp);
-#                             INSERT INTO "{0}" ("raster","filename","timestamp") VALUES ('{1}'::raster,'{2}','{3}') RETURNING "id";
-#                             END;
-#                             '''.format(tableName, rasterBinary, filename, timestamp)
-#             else:
-#                 statement = '''
-#                             BEGIN;
-#                             CREATE TABLE IF NOT EXISTS "{0}" ("id" serial PRIMARY KEY, "raster" raster,"filename" text, "timestamp" timestamp);
-#                             INSERT INTO "{0}" ("raster","filename") VALUES ('{1}'::raster,'{2}') RETURNING "id";
-#                             END;
-#                             '''.format(tableName, rasterBinary, filename)
-#                         
-#             result = self._session.execute(statement)
 
+            # Populate raster record
+            mapKitRaster = MapKitRaster()
+            mapKitRaster.filename = filename
+            mapKitRaster.raster = rasterBinary
             
-            Base.metadata.create_all(self._engine)
+            if 'timestamp' in raster:
+                mapKitRaster.timestamp = raster['timestamp']
             
-            Session = sessionmaker(bind=self._engine)
-            session = Session()
-
-            raster = RasterTable()
-            raster.filename = filename
-            raster.raster = rasterBinary
-            session.add(raster)
-            session.commit()
+            # Add to session
+            session.add(mapKitRaster)
+        
+        session.commit()
             
             
             

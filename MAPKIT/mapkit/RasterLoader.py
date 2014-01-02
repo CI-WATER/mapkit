@@ -8,7 +8,7 @@
 ********************************************************************************
 '''
 
-import subprocess, os, datetime
+import subprocess, os
 
 from MapKitRaster import MapKitRaster
 from mapkit import Base
@@ -30,6 +30,32 @@ class RasterLoader(object):
         self._engine = engine
         self._raster2pgsql = raster2pgsql
         
+
+    def rasterToWKB(self, rasterPath, srid, noData):
+        raster2pgsqlProcess = subprocess.Popen([self._raster2pgsql,
+                                                '-s', srid, 
+                                                '-N', noData, 
+                                                rasterPath, 
+                                                'n_a'],stdout=subprocess.PIPE)
+        
+        # This commandline tool generates the SQL to load the raster into the database
+        # However, we want to use SQLAlchemy to load the values into the database.
+        # We do this by extracting the value from the sql that is generated.
+        sql, error = raster2pgsqlProcess.communicate()
+        if sql:
+            # This esoteric line is used to extract only the value of the raster (which is stored as a Well Know Binary string)
+            # Example of Output:
+            # BEGIN;
+            # INSERT INTO "idx_index_maps" ("rast") VALUES ('0100...56C096CE87'::raster);
+            # END;
+            # The WKB is wrapped in single quotes. Splitting on single quotes isolates it as the
+            # second item in the resulting list.
+            wellKnownBinary = sql.split("'")[1]
+        else:
+            print error
+            raise
+        return wellKnownBinary
+
     def load(self, tableName='rasters', rasters=[]):
         '''
         Accepts a list of paths to raster files to load into the database.
@@ -57,39 +83,7 @@ class RasterLoader(object):
             else:
                 noData = '-1'
                                 
-            raster2pgsqlProcess = subprocess.Popen(
-                                                   [
-                                                    self._raster2pgsql,
-                                                    '-s',
-                                                    srid,
-                                                    '-N',
-                                                    noData,
-                                                    rasterPath, 
-                                                    'n_a'
-                                                   ],
-                                                   stdout=subprocess.PIPE
-                                                  )
-            
-            # This commandline tool generates the SQL to load the raster into the database
-            # However, we want to use SQLAlchemy to load the values into the database. 
-            # We do this by extracting the value from the sql that is generated.
-            sql, error = raster2pgsqlProcess.communicate()        
-            
-            if sql:
-                # This esoteric line is used to extract only the value of the raster (which is stored as a Well Know Binary string)
-                
-                # Example of Output:
-                # BEGIN;
-                # INSERT INTO "idx_index_maps" ("rast") VALUES ('0100...56C096CE87'::raster);
-                # END;
-                
-                # The WKB is wrapped in single quotes. Splitting on single quotes isolates it as the 
-                # second item in the resulting list.
-                wellKnownBinary =  sql.split("'")[1]
-                
-            else:
-                print error
-                raise
+            wellKnownBinary = self.rasterToWKB(rasterPath, srid, noData)
                 
             rasterBinary = wellKnownBinary
             
