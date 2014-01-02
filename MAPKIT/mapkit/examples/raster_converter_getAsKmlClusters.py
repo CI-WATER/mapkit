@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 
 # For pretty print functionality for debugging
 # not recommended for production
-import xml.dom.minidom
+# import xml.dom.minidom
 import time
 
 # Setup SQLAlchemy connection

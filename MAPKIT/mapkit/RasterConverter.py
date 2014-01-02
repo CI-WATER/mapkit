@@ -529,8 +529,12 @@ class RasterConverter(object):
         
         # Resulting equation will be:
         # rampIndex = slope * value + intercept
-        slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
-        intercept = maxRampIndex - (slope * maxValue)
+        if minValue != maxValue:
+            slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
+            intercept = maxRampIndex - (slope * maxValue)
+        else:
+            slope = 0
+            intercept = minRampIndex
         
         # Return color ramp, slope, and intercept to interpolate by value
         return colorRamp, slope, intercept
