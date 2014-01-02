@@ -31,7 +31,14 @@ rasterPaths = [{'path': '/Users/swainn/projects/post_gis/rasters/combo.idx',
                {'path': '/Users/swainn/projects/post_gis/rasters/soil.idx',
                 'srid': 26912,
                 'no-data': -1,
-                'timestamp': datetime.today()}]
+                'timestamp': datetime.today()},
+               {'path': '/Users/swainn/projects/post_gis/large_rasters/LittleDellBaseYear.ele',
+                'srid': 26912,
+                'no-data': 0,
+                'timestamp': datetime.today()},
+               {'path': '/Users/swainn/projects/post_gis/large_rasters/Soil_Type.idx',
+                'srid': 26912,
+                'no-data': 0}]
 
 
 # Execute load method
