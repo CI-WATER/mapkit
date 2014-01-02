@@ -1,6 +1,6 @@
 Metadata-Version: 1.0
 Name: mapkit
-Version: 0.0.2
+Version: 0.0.3
 Summary: Mapping tools for PostGIS-enabled PostgreSQL databases.
 Home-page: https://bitbucket.org/swainn/mapkit
 Author: Nathan Swain

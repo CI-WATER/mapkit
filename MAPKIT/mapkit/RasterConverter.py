@@ -397,6 +397,27 @@ class RasterConverter(object):
         
         return ET.tostring(kml), binaryPNG
        
+    def getAsKmlAnimation(self):
+        '''
+        Return a sequence of rasters with timestamps as a kml with time markers for animation.
+        '''
+        
+    def getAsGrassAsciiRaster(self):
+        '''
+        Returns a string representation of the raster in GRASS ASCII raster format.
+        '''
+        
+    def getAsGdalRaster(self):
+        '''
+        Returns a string representation of the raster in the specified format. Wrapper for 
+        ST_AsGDALRaster function in the database.
+        '''
+        
+    def supportedGdalRasterFormats(self):
+        '''
+        Return a list of the supported GDAL raster formats.
+        '''
+        
     def setColorRamp(self, colorRamp=None):
         '''
         Set the color ramp of the raster converter instance

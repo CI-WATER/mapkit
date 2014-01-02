@@ -12,6 +12,9 @@ mapkit.egg-info/requires.txt
 mapkit.egg-info/top_level.txt
 mapkit/examples/__init__.py
 mapkit/examples/raster_converter_getAsKmlClusters.py
+mapkit/examples/raster_converter_getAsKmlClusters_large_raster.py
 mapkit/examples/raster_converter_getAsKmlGrid.py
+mapkit/examples/raster_converter_getAsKmlGrid_large_raster.py
 mapkit/examples/raster_converter_getAsKmlPng.py
+mapkit/examples/raster_converter_getAsKmlPng_large_raster.py
 mapkit/examples/raster_loader_load.py
