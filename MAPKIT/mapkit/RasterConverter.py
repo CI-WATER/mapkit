@@ -399,7 +399,7 @@ class RasterConverter(object):
         Return a sequence of rasters with timestamps as a kml with time markers for animation.
         '''
         
-    def getAsGrassAsciiRaster(self, rasterFieldName, tableName, rasterIdFieldName, rasterId, newSRID=None):
+    def getAsGrassAsciiRaster(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', newSRID=None):
         '''
         Returns a string representation of the raster in GRASS ASCII raster format.
         '''
