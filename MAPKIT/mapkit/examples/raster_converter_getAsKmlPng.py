@@ -28,8 +28,8 @@ converter.setCustomColorRamp(colors, 2)
 start = time.time()
 
 kmlString, binaryPngString = converter.getAsKmlPng(tableName=tableName, 
-                                                          rasterId=rasterId,
-                                                          documentName=documentName)
+                                                   rasterId=rasterId,
+                                                   documentName=documentName)
 
 
 # Create kmz (zip) archive
