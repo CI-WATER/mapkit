@@ -4,6 +4,7 @@ mapkit/MapKitRaster.py
 mapkit/RasterConverter.py
 mapkit/RasterLoader.py
 mapkit/__init__.py
+mapkit/sqlaspatial.py
 mapkit/sqlatypes.py
 mapkit.egg-info/PKG-INFO
 mapkit.egg-info/SOURCES.txt
@@ -11,6 +12,7 @@ mapkit.egg-info/dependency_links.txt
 mapkit.egg-info/requires.txt
 mapkit.egg-info/top_level.txt
 mapkit/examples/__init__.py
+mapkit/examples/raster_converter_gdal_raster_format.py
 mapkit/examples/raster_converter_getAsKmlClusters.py
 mapkit/examples/raster_converter_getAsKmlClusters_large_raster.py
 mapkit/examples/raster_converter_getAsKmlGrid.py
