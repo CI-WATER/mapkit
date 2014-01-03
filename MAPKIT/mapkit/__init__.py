@@ -11,3 +11,6 @@
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
+
+def version():
+    return '0.0.5'
