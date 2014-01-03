@@ -1,6 +1,5 @@
 from mapkit.RasterConverter import RasterConverter
 from sqlalchemy import create_engine
-from datetime import datetime
 
 # Setup SQLAlchemy connection
 engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postgis')

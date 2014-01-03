@@ -11,7 +11,8 @@ import math
 import xml.etree.ElementTree as ET
 
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.sql import func
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm.session import Session
 
 class RasterConverter(object):
     '''
@@ -32,11 +33,16 @@ class RasterConverter(object):
     COLOR_RAMP_TERRAIN = 1
     COLOR_RAMP_AQUA = 2
     
-    def __init__(self, sqlAlchemyEngine, colorRamp=None):
+    def __init__(self, sqlAlchemyEngineOrSession, colorRamp=None):
         '''
         Constructor
         '''
-        self._engine = sqlAlchemyEngine
+        # Create sqlalchemy session
+        if isinstance(sqlAlchemyEngineOrSession, Engine):
+            sessionMaker = sessionmaker(bind=sqlAlchemyEngineOrSession)
+            self._session = sessionMaker()
+        elif isinstance(sqlAlchemyEngineOrSession, Session):
+            self._session = sqlAlchemyEngineOrSession        
         
         if not colorRamp:
             self.setDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
@@ -49,17 +55,13 @@ class RasterConverter(object):
         Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
         Returns the kml document as a string.
         '''
-        # Create sqlalchemy session
-        sessionMaker = sessionmaker(bind=self._engine)
-        session = sessionMaker()
-        
         # Validate alpha
         if not (alpha >= 0 and alpha <= 1.0):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
             raise
         
         # Get color ramp and interpolation parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
+        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
         
         # Get polygons for each cell in kml format
         statement = '''
@@ -71,7 +73,7 @@ class RasterConverter(object):
                     ORDER BY val;
                     ''' % (rasterFieldName, tableName, rasterIdFieldName, rasterId)
         
-        result = session.execute(statement)
+        result = self._session.execute(statement)
         
         # Initialize KML Document            
         kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
@@ -163,16 +165,13 @@ class RasterConverter(object):
         of each cluster. Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
         Returns the kml document as a string.
         '''
-        # Create sqlalchemy session
-        sessionMaker = sessionmaker(bind=self._engine)
-        session = sessionMaker()
         
         if not (alpha >= 0 and alpha <= 1.0):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
             raise
         
         # Get color ramp and interpolation parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
+        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
         
         # Get a set of polygons representing cluster of adjacent cells with the same value
         statement = '''
@@ -184,7 +183,7 @@ class RasterConverter(object):
                     ORDER BY val;
                     ''' % (rasterFieldName, tableName, rasterIdFieldName, rasterId)
                     
-        result = session.execute(statement)
+        result = self._session.execute(statement)
         
         # Initialize KML Document            
         kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
@@ -268,12 +267,9 @@ class RasterConverter(object):
         IMPORTANT: The PNG image is referenced in the kml as 'raster.png', thus it must be written to file with that 
         name for the kml to recognize it.
         '''
-        # Create sqlalchemy session
-        sessionMaker = sessionmaker(bind=self._engine)
-        session = sessionMaker()
         
         # Get the color ramp and parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
+        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
         
         # Use ST_ValueCount to get all unique values
         statement = '''
@@ -283,7 +279,7 @@ class RasterConverter(object):
                         ORDER BY (pvc).value DESC;
                     '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
                     
-        result = session.execute(statement)
+        result = self._session.execute(statement)
         rampList = []
         
         # Use the color ramp, slope, intercept and value to look up rbg for each value
@@ -306,7 +302,7 @@ class RasterConverter(object):
                     WHERE {2}={3};
                     '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, rampString)
                     
-        result = session.execute(statement)
+        result = self._session.execute(statement)
         
         for row in result:
             binaryPNG = row.png
@@ -321,7 +317,7 @@ class RasterConverter(object):
                     ) As foo;
                     '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
         
-        result = session.execute(statement)
+        result = self._session.execute(statement)
         
         for row in result:
             upperLeftY = row.upperlefty
@@ -470,12 +466,9 @@ class RasterConverter(object):
         Returns a string/buffer representation of the raster in the specified format. Wrapper for 
         ST_AsGDALRaster function in the database.
         '''
-        # Create sqlalchemy session
-        sessionMaker = sessionmaker(bind=self._engine)
-        session = sessionMaker()
         
         # Check gdalFormat
-        if not (gdalFormat in RasterConverter.supportedGdalRasterFormats(self._engine)):
+        if not (gdalFormat in RasterConverter.supportedGdalRasterFormats(self._session)):
             print 'FORMAT NOT SUPPORTED: {0} format is not supported in this PostGIS installation.'.format(gdalFormat)
             raise
         
@@ -504,19 +497,23 @@ class RasterConverter(object):
                     '''.format(rasterFieldName, gdalFormat, tableName, rasterIdFieldName, rasterId,  options, srid)
         
         # Execute query
-        result = session.execute(statement).scalar()
+        result = self._session.execute(statement).scalar()
         
         return result
         
     @classmethod
-    def supportedGdalRasterFormats(cls, engine):
+    def supportedGdalRasterFormats(cls, sqlAlchemyEngineOrSession):
         '''
         Return a list of the supported GDAL raster formats.
         '''
-        # Create sqlalchemy session
-        sessionMaker = sessionmaker(bind=engine)
-        session = sessionMaker()
+        if isinstance(sqlAlchemyEngineOrSession, Engine):
+            # Create sqlalchemy session
+            sessionMaker = sessionmaker(bind=sqlAlchemyEngineOrSession)
+            session = sessionMaker()
+        elif isinstance(sqlAlchemyEngineOrSession, Session):
+            session = sqlAlchemyEngineOrSession        
         
+        # Execute statment
         statement = 'SELECT * FROM st_gdaldrivers() ORDER BY short_name;'
         
         result = session.execute(statement)
@@ -622,7 +619,7 @@ class RasterConverter(object):
                 WHERE {2}={3}
                 ) As foo;
                 '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-        result = session.execute(statement)
+        result = self._session.execute(statement)
         
         # extract the stats
         for row in result:
