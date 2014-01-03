@@ -11,6 +11,7 @@ import math
 import xml.etree.ElementTree as ET
 
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import func
 
 class RasterConverter(object):
     '''
@@ -402,21 +403,130 @@ class RasterConverter(object):
         Return a sequence of rasters with timestamps as a kml with time markers for animation.
         '''
         
-    def getAsGrassAsciiRaster(self):
+    def getAsGrassAsciiRaster(self, rasterFieldName, tableName, rasterIdFieldName, rasterId, newSRID=None):
         '''
         Returns a string representation of the raster in GRASS ASCII raster format.
         '''
+        # Get raster in ArcInfo Grid format
+        arcInfoGrid = str(self.getAsGdalRaster(rasterFieldName, tableName, rasterIdFieldName, rasterId, 'AAIGrid', newSRID)).splitlines()
         
-    def getAsGdalRaster(self):
+        ## Convert arcInfoGrid to GRASS ASCII format ##
+        # Get values from heaser which look something this:
+        # ncols        67
+        # nrows        55
+        # xllcorner    425802.32143212341
+        # yllcorner    44091450.41551345213
+        # cellsize     90.0000000
+        # ...
+        nCols = int(arcInfoGrid[0].split()[1])
+        nRows = int(arcInfoGrid[1].split()[1])
+        xLLCorner = float(arcInfoGrid[2].split()[1])
+        yLLCorner = float(arcInfoGrid[3].split()[1])
+        cellSize = float(arcInfoGrid[4].split()[1])
+        
+        # Remove old headers
+        for i in range(0, 5):
+            arcInfoGrid.pop(0)
+            
+        # Check for NODATA_value row and remove if it is there
+        if 'NODATA_value' in arcInfoGrid[0]:
+            arcInfoGrid.pop(0)
+        
+        ## Calculate values for GRASS ASCII headers ##
+        # These should look like this:
+        # north: 4501028.972140
+        # south: 4494548.972140
+        # east: 460348.288604
+        # west: 454318.288604
+        # rows: 72
+        # cols: 67
+        # ...
+        
+        # xLLCorner and yLLCorner represent the coordinates for the Lower Left corner of the raster
+        north = yLLCorner + (cellSize * nRows)
+        south = yLLCorner
+        east = xLLCorner + (cellSize * nCols)
+        west = xLLCorner
+        
+        # Create header Lines (the first shall be last and the last shall be first)
+        grassHeader = ['cols: %s' % nCols,
+                       'rows: %s' % nRows,
+                       'west: %s' % west,
+                       'east: %s' % east,
+                       'south: %s' % south,
+                       'north: %s' % north]
+        
+        # Insert grass headers into the grid
+        for header in grassHeader:
+            arcInfoGrid.insert(0, header)
+        
+        # Create string
+        arcInfoGridString = '\n'.join(arcInfoGrid)
+        return arcInfoGridString
+        
+        
+    def getAsGdalRaster(self, rasterFieldName, tableName, rasterIdFieldName, rasterId, gdalFormat, newSRID=None, **kwargs):
         '''
-        Returns a string representation of the raster in the specified format. Wrapper for 
+        Returns a string/buffer representation of the raster in the specified format. Wrapper for 
         ST_AsGDALRaster function in the database.
         '''
+        # Create sqlalchemy session
+        sessionMaker = sessionmaker(bind=self._engine)
+        session = sessionMaker()
         
-    def supportedGdalRasterFormats(self):
+        # Check gdalFormat
+        if not (gdalFormat in RasterConverter.supportedGdalRasterFormats(self._engine)):
+            print 'FORMAT NOT SUPPORTED: {0} format is not supported in this PostGIS installation.'.format(gdalFormat)
+            raise
+        
+        # Setup srid
+        if newSRID:
+            srid = ', {0}'.format(newSRID)
+        else:
+            srid = ''
+        
+        # Compile options
+        if kwargs:
+            optionsList = []
+            for key, value in kwargs.iteritems():
+                kwargString = "'{0}={1}'".format(key, value)
+                optionsList.append(kwargString)
+            
+            optionsString = ','.join(optionsList)
+            options = ', ARRAY[{0}]'.format(optionsString)
+        else:
+            options = ''
+        
+        # Create statement
+        statement = '''
+                    SELECT ST_AsGDALRaster({0}, '{1}'{5}{6})
+                    FROM {2} WHERE {3}={4};
+                    '''.format(rasterFieldName, gdalFormat, tableName, rasterIdFieldName, rasterId,  options, srid)
+        
+        # Execute query
+        result = session.execute(statement).scalar()
+        
+        return result
+        
+    @classmethod
+    def supportedGdalRasterFormats(cls, engine):
         '''
         Return a list of the supported GDAL raster formats.
         '''
+        # Create sqlalchemy session
+        sessionMaker = sessionmaker(bind=engine)
+        session = sessionMaker()
+        
+        statement = 'SELECT * FROM st_gdaldrivers() ORDER BY short_name;'
+        
+        result = session.execute(statement)
+        
+        supported = dict()
+        
+        for row in result:
+            supported[row[1]] = {'description': row[2], 'options': row[3]}
+            
+        return supported
         
     def setColorRamp(self, colorRamp=None):
         '''

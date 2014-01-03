@@ -9,7 +9,7 @@ engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postg
 gsshapySessionMaker = sessionmaker(bind=engine)
 session = gsshapySessionMaker()
 
-# Initialize raster converter
+# Initialize raster loader
 loader = RasterLoader(engine=engine,
                       raster2pgsql='/Applications/Postgres93.app/Contents/MacOS/bin/raster2pgsql')
 
