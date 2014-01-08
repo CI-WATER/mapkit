@@ -271,23 +271,17 @@ class RasterConverter(object):
         # Get the color ramp and parameters
         colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
         
-        # Use ST_ValueCount to get all unique values
-        statement = '''
-                    SELECT (pvc).*
-                    FROM (SELECT ST_ValueCount({0}) As pvc
-                        FROM {1} WHERE {2}={3}) As foo
-                        ORDER BY (pvc).value DESC;
-                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-                    
-        result = self._session.execute(statement)
+        # Convert color ramp to format the database can use
         rampList = []
         
-        # Use the color ramp, slope, intercept and value to look up rbg for each value
-        for row in result:
-            value = row.value
-            rampIndex = math.trunc(slope * float(value) + intercept)
+        for index in range(len(colorRamp)):
+            rampIndex = len(colorRamp) - index - 1
+            valueForIndex = math.trunc((rampIndex - intercept) / slope)
             rgb = colorRamp[rampIndex]
-            rampList.append('{0} {1} {2} {3} {4}'.format(value, rgb[0], rgb[1], rgb[2], int(alpha * 255)))
+            rampList.append('{0} {1} {2} {3} {4}'.format(valueForIndex, rgb[0], rgb[1], rgb[2], int(alpha * 255)))
+            print valueForIndex, rgb
+        
+        print colorRamp
         
         # Add a line for the no-data values (nv)
         rampList.append('nv 0 0 0 0')
@@ -623,8 +617,9 @@ class RasterConverter(object):
         
         # extract the stats
         for row in result:
-            minValue = row.min
-            maxValue = row.max
+            minValue = math.trunc(row.min)
+            maxValue = math.ceil(row.max)
+            print minValue, maxValue
         
         # Set the no data value if min is -1 or 0
         if ((float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN)):

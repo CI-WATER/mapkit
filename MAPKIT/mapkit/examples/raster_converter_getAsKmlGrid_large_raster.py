@@ -7,18 +7,18 @@ from sqlalchemy import create_engine
 import time
 
 # Setup SQLAlchemy connection
-engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postgis')
+engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/raster_test')
             
 tableName = 'map_kit_rasters'
-rasterId = 32
-name = 'Little Dell Gridded'
-path = '/Users/swainn/projects/post_gis/large_rasters/little_dell_gridded.kml'
+rasterId = 3
+name = 'Texas Groundwater Elevation Gridded'
+path = '/Users/swainn/projects/post_gis/large_rasters/waterelev_gridded.kml'
 
 # Initialize raster converter
-converter = RasterConverter(sqlAlchemyEngine=engine)
+converter = RasterConverter(sqlAlchemyEngineOrSession=engine)
 # colors = [(255, 0, 0),(0, 255, 0),(0, 0, 255)]
 # converter.setCustomColorRamp(colors, 10)
-converter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
+converter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_TERRAIN)
 
 # Start timer
 start = time.time()

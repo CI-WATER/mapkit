@@ -8,28 +8,28 @@ import time, os
 from zipfile import ZipFile
 
 # Setup SQLAlchemy connection
-engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/gsshapy_postgis')
+engine = create_engine('postgresql://swainn:(|w@ter@localhost:5432/raster_test')
 
 tableName = 'map_kit_rasters'
-rasterId = 31
-documentName = 'Little Dell PNG'
+rasterId = 4
+documentName = 'Texas Elevation PNG'
 directory = '/Users/swainn/projects/post_gis/large_rasters'
-archiveName = 'little_dell_png'
+archiveName = 'texas_elev_png'
 
 # Initialize raster converter
-converter = RasterConverter(sqlAlchemyEngine=engine)
+converter = RasterConverter(sqlAlchemyEngineOrSession=engine)
 
 # Configure RasterConverter instance
 # colors = [(255, 0, 0),(0, 255, 0),(0, 0, 255)]
 # converter.setCustomColorRamp(colors, 2)
-converter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_TERRAIN)
+converter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_AQUA)
 
 # Start timer
 start = time.time()
 
 kmlString, binaryPngString = converter.getAsKmlPng(tableName=tableName, 
-                                                          rasterId=rasterId,
-                                                          documentName=documentName)
+                                                   rasterId=rasterId,
+                                                   documentName=documentName)
 
 
 # Create kmz (zip) archive
