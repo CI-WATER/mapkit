@@ -8,7 +8,7 @@
 ********************************************************************************
 '''
 
-import subprocess, os
+import subprocess, os, json
 
 from MapKitRaster import MapKitRaster
 from mapkit import Base
@@ -107,12 +107,64 @@ class RasterLoader(object):
             print error
             raise
         return wellKnownBinary
-            
-            
-            
-            
-            
-            
-        
-        
-        
+
+    @classmethod
+    def makeSingleBandWKBRaster(cls, session, width, height, upperLeftX, upperLeftY, cellSizeX, cellSizeY, skewX, skewY, srid, dataArray, initialValue=None, noDataValue=None):
+        """
+        Generate Well Known Binary via SQL. Must be used on a PostGIS database as it relies on several PostGIS
+        database functions.
+        :param session: SQLAlchemy session object bound to a PostGIS enabled database
+        :param height: Height of the raster (or number of rows)
+        :param width: Width of the raster (or number of columns)
+        :param upperLeftX: Raster upper left corner X coordinate
+        :param upperLeftY: Raster upper left corner Y coordinate
+        :param cellSizeX: Raster cell size in X direction
+        :param cellSizeY: Raster cell size in Y direction
+        :param skewX: Skew in X direction
+        :param skewY: Skew in Y direction
+        :param srid: SRID of the raster
+        :param initialValue: Initial / default value of the raster cells
+        :param noDataValue: Value of cells to be considered as cells containing no cells
+        :param dataArray: 2-dimensional array of values that will populate the raster
+        """
+        # Stringify the data array
+        dataArrayString = json.dumps(dataArray)
+
+        # Validate
+        if initialValue is None:
+            initialValue = 'NULL'
+
+        if noDataValue is None:
+            noDataValue = 'NULL'
+
+        # Create the SQL statement
+        statement = '''
+                    SELECT ST_SetValues(
+                        ST_AddBand(
+                            ST_MakeEmptyRaster({0}::integer, {1}::integer, {2}::float8, {3}::float8, {4}::float8, {5}::float8, {6}::float8, {7}::float8, {8}::integer),
+                            1::integer, '32BSI'::text, {9}::double precision, {10}::double precision
+                        ),
+                        1, 1, 1, ARRAY{11}::double precision[][]
+                    );
+                    '''.format(width,
+                               height,
+                               upperLeftX,
+                               upperLeftY,
+                               cellSizeX,
+                               cellSizeY,
+                               skewX,
+                               skewY,
+                               srid,
+                               initialValue,
+                               noDataValue,
+                               dataArrayString)
+
+        result = session.execute(statement)
+
+        # Extract result
+        wellKnownBinary = ''
+
+        for row in result:
+            wellKnownBinary = row[0]
+
+        return wellKnownBinary
