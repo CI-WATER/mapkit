@@ -8,7 +8,9 @@
 ********************************************************************************
 '''
 
-import subprocess, os, json
+import subprocess
+import os
+import json
 
 from MapKitRaster import MapKitRaster
 from mapkit import Base
@@ -79,11 +81,11 @@ class RasterLoader(object):
             
     @classmethod
     def rasterToWKB(cls, rasterPath, srid, noData, raster2pgsql):
-        '''
+        """
         Accepts a raster file and converts it to Well Known Binary text using the raster2pgsql
         executable that comes with PostGIS. This is the format that rasters are stored in a
         PostGIS database.
-        '''
+        """
         raster2pgsqlProcess = subprocess.Popen([raster2pgsql,
                                                 '-s', srid, 
                                                 '-N', noData, 
@@ -125,10 +127,13 @@ class RasterLoader(object):
         :param srid: SRID of the raster
         :param initialValue: Initial / default value of the raster cells
         :param noDataValue: Value of cells to be considered as cells containing no cells
-        :param dataArray: 2-dimensional array of values that will populate the raster
+        :param dataArray: 2-dimensional list of values or a string representation of a 2-dimensional list that will be used to populate the raster values
         """
         # Stringify the data array
-        dataArrayString = json.dumps(dataArray)
+        if isinstance(dataArray, str):
+            dataArrayString = dataArray
+        else:
+            dataArrayString = json.dumps(dataArray)
 
         # Validate
         if initialValue is None:
@@ -142,7 +147,7 @@ class RasterLoader(object):
                     SELECT ST_SetValues(
                         ST_AddBand(
                             ST_MakeEmptyRaster({0}::integer, {1}::integer, {2}::float8, {3}::float8, {4}::float8, {5}::float8, {6}::float8, {7}::float8, {8}::integer),
-                            1::integer, '32BSI'::text, {9}::double precision, {10}::double precision
+                            1::integer, '32BF'::text, {9}::double precision, {10}::double precision
                         ),
                         1, 1, 1, ARRAY{11}::double precision[][]
                     );

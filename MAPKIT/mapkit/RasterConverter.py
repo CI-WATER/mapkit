@@ -1,4 +1,4 @@
-'''
+"""
 ********************************************************************************
 * Name: RasterConverter
 * Author: Nathan Swain
@@ -6,8 +6,9 @@
 * Copyright: (c) Brigham Young University 2013
 * License: BSD 2-Clause
 ********************************************************************************
-'''
+"""
 import math
+from xml.dom import minidom
 import xml.etree.ElementTree as ET
 
 from sqlalchemy.orm import sessionmaker
@@ -15,11 +16,11 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm.session import Session
 
 class RasterConverter(object):
-    '''
+    """
     An instance of RasterConverter can be used to extract PostGIS
     rasters from a database and convert them into different formats
     for visualization.
-    '''
+    """
     
     # Class variables
     LINE_COLOR = 'FF000000'
@@ -34,9 +35,9 @@ class RasterConverter(object):
     COLOR_RAMP_AQUA = 2
     
     def __init__(self, sqlAlchemyEngineOrSession, colorRamp=None):
-        '''
+        """
         Constructor
-        '''
+        """
         # Create sqlalchemy session
         if isinstance(sqlAlchemyEngineOrSession, Engine):
             sessionMaker = sessionmaker(bind=sqlAlchemyEngineOrSession)
@@ -50,11 +51,11 @@ class RasterConverter(object):
             self._colorRamp = colorRamp
 
     def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
-        '''
-        Creates a KML file with each cell in the raster represented by a polygon. The result is a vector grid representation of the raster. 
+        """
+        Creates a KML file with each cell in the raster represented by a polygon. The result is a vector grid representation of the raster.
         Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
         Returns the kml document as a string.
-        '''
+        """
         # Validate alpha
         if not (alpha >= 0 and alpha <= 1.0):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
@@ -160,11 +161,11 @@ class RasterConverter(object):
         return ET.tostring(kml)
     
     def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
-        '''
-        Creates a KML file where adjacent cells with the same value are clustered together into a polygons. The result is a vector representation 
+        """
+        Creates a KML file where adjacent cells with the same value are clustered together into a polygons. The result is a vector representation
         of each cluster. Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
         Returns the kml document as a string.
-        '''
+        """
         
         if not (alpha >= 0 and alpha <= 1.0):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
@@ -260,13 +261,13 @@ class RasterConverter(object):
         return ET.tostring(kml)
     
     def getAsKmlPng(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default', drawOrder=0):
-        '''
+        """
         Creates a KML wrapper and PNG representat of the raster. Returns a string of the kml file contents and
-        a binary string of the PNG contents. The color ramp used to generate the PNG is embedded in the ExtendedData 
+        a binary string of the PNG contents. The color ramp used to generate the PNG is embedded in the ExtendedData
         tag of the GroundOverlay.
-        IMPORTANT: The PNG image is referenced in the kml as 'raster.png', thus it must be written to file with that 
+        IMPORTANT: The PNG image is referenced in the kml as 'raster.png', thus it must be written to file with that
         name for the kml to recognize it.
-        '''
+        """
         
         # Get the color ramp and parameters
         colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
@@ -279,9 +280,6 @@ class RasterConverter(object):
             valueForIndex = math.trunc((rampIndex - intercept) / slope)
             rgb = colorRamp[rampIndex]
             rampList.append('{0} {1} {2} {3} {4}'.format(valueForIndex, rgb[0], rgb[1], rgb[2], int(alpha * 255)))
-            print valueForIndex, rgb
-        
-        print colorRamp
         
         # Add a line for the no-data values (nv)
         rampList.append('nv 0 0 0 0')
@@ -388,15 +386,155 @@ class RasterConverter(object):
         
         return ET.tostring(kml), binaryPNG
        
-    def getAsKmlAnimation(self):
-        '''
+    def getAsKmlGridAnimation(self, tableName, timeStampedRasters=[], rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
+        """
         Return a sequence of rasters with timestamps as a kml with time markers for animation.
-        '''
+        :param tableName: Name of the table to extract rasters from
+        :param timeStampedRasters: List of dictionaries with keys: rasterId, beginDateTime, endDateTime
+        :param rasterIdFieldName: Name of the id field for rasters
+        :param rasterFieldName: Name of the field where rasters are stored
+        :param alpha: The transparency to apply to each raster cell
+        :param documentName: The name to give to the KML document (will be listed in legend under this name
+        """
+
+        # Validate alpha
+        if not (alpha >= 0 and alpha <= 1.0):
+            print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
+            raise
+
+        # Initialize KML Document
+        kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
+        document = ET.SubElement(kml, 'Document')
+        docName = ET.SubElement(document, 'name')
+        docName.text = documentName
+
+        # Retrieve the rasters and styles
+        for timeStampedRaster in timeStampedRasters:
+            # Validate dictionary
+            if 'rasterId' not in timeStampedRaster:
+                print 'RASTER CONVERSION ERROR: rasterId must be provided for each raster.'
+                raise
+            elif 'beginDateTime' not in timeStampedRaster:
+                print 'RASTER CONVERSION ERROR: startDateTime must be provided for each raster.'
+                raise
+            elif 'endDateTime' not in timeStampedRaster:
+                print 'RASTER CONVERSION ERROR: endDateTime must be provided for each raster.'
+                raise
+
+            # Extract variable
+            rasterId = timeStampedRaster['rasterId']
+            beginDateTime = timeStampedRaster['beginDateTime']
+            endDateTime = timeStampedRaster['endDateTime']
+
+            # Determine styles
+            colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
+
+            # Get polygons for each cell in kml format
+            statement = '''
+                        SELECT x, y, val, ST_AsKML(geom) AS polygon
+                        FROM (
+                        SELECT (ST_PixelAsPolygons(%s)).*
+                        FROM %s WHERE %s=%s
+                        ) AS foo
+                        ORDER BY val;
+                        ''' % (rasterFieldName, tableName, rasterIdFieldName, rasterId)
+
+            result = self._session.execute(statement)
+
+            # Set initial group value
+            groupValue = -9999999.0
+
+            # Add polygons to the kml file with styling
+            for row in result:
+                # Value will be None if it is a no data value
+                if row.val:
+                    value = float(row.val)
+                else:
+                    value = None
+
+                polygonString = row.polygon
+                i = int(row.x)
+                j = int(row.y)
+
+                # Only create placemarks for values that are not no data values
+                if value:
+                    # Create a new placemark for each group of values
+                    if value != groupValue:
+                        placemark = ET.SubElement(document, 'Placemark')
+                        placemarkName = ET.SubElement(placemark, 'name')
+                        placemarkName.text = str(value)
+
+                        # Create style tag and setup styles
+                        style = ET.SubElement(placemark, 'Style')
+
+                        # Set polygon line style
+                        lineStyle = ET.SubElement(style, 'LineStyle')
+
+                        # Set polygon line color and width
+                        lineColor = ET.SubElement(lineStyle, 'color')
+                        lineColor.text = self.LINE_COLOR
+                        lineWidth = ET.SubElement(lineStyle, 'width')
+                        lineWidth.text = str(self.LINE_WIDTH)
+
+                        # Set polygon fill color
+                        polyStyle = ET.SubElement(style, 'PolyStyle')
+                        polyColor = ET.SubElement(polyStyle, 'color')
+
+                        # Get ramp index for polygon fill color
+                        rampIndex = math.trunc(slope * float(value) + intercept)
+
+                        # Convert alpha from 0.0-1.0 decimal to 00-FF string
+                        integerAlpha = int(alpha * self.MAX_HEX_DECIMAL)
+
+                        # Get RGB color from color ramp and convert to KML hex ABGR string with alpha
+                        integerRGB = colorRamp[rampIndex]
+                        hexABGR = '%02X%02X%02X%02X' % (integerAlpha, integerRGB[2], integerRGB[1], integerRGB[0])
+
+                        # Set the polygon fill alpha and color
+                        polyColor.text = hexABGR
+
+                        # Create TimeSpan tag
+                        timeSpan = ET.SubElement(placemark, 'TimeSpan')
+
+                        # Create begin and end tags
+                        begin = ET.SubElement(timeSpan, 'begin')
+                        # end = ET.SubElement(timeSpan, 'end')
+
+                        # Assign value to begin and end tags
+                        begin.text = beginDateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                        # end.text = endDateTime.strftime('%Y-%m-%dT%H:%M:%S')
+
+                        # Create multigeometry tag
+                        multigeometry = ET.SubElement(placemark, 'MultiGeometry')
+
+                        # Create the data tag
+                        extendedData = ET.SubElement(placemark, 'ExtendedData')
+
+                        # Add value to data
+                        valueData = ET.SubElement(extendedData, 'Data', name='value')
+                        valueValue = ET.SubElement(valueData, 'value')
+                        valueValue.text = str(value)
+
+                        iData = ET.SubElement(extendedData, 'Data', name='i')
+                        valueI = ET.SubElement(iData, 'value')
+                        valueI.text = str(i)
+
+                        jData = ET.SubElement(extendedData, 'Data', name='j')
+                        valueJ = ET.SubElement(jData, 'value')
+                        valueJ.text = str(j)
+
+                        groupValue = value
+
+                    # Get polygon object from kml string and append to the current multigeometry group
+                    polygon = ET.fromstring(polygonString)
+                    multigeometry.append(polygon)
+
+        return ET.tostring(kml)
         
     def getAsGrassAsciiRaster(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', newSRID=None):
-        '''
+        """
         Returns a string representation of the raster in GRASS ASCII raster format.
-        '''
+        """
         # Get raster in ArcInfo Grid format
         arcInfoGrid = str(self.getAsGdalRaster(rasterFieldName, tableName, rasterIdFieldName, rasterId, 'AAIGrid', newSRID)).splitlines()
         
@@ -456,10 +594,10 @@ class RasterConverter(object):
         
         
     def getAsGdalRaster(self, rasterFieldName, tableName, rasterIdFieldName, rasterId, gdalFormat, newSRID=None, **kwargs):
-        '''
-        Returns a string/buffer representation of the raster in the specified format. Wrapper for 
+        """
+        Returns a string/buffer representation of the raster in the specified format. Wrapper for
         ST_AsGDALRaster function in the database.
-        '''
+        """
         
         # Check gdalFormat
         if not (gdalFormat in RasterConverter.supportedGdalRasterFormats(self._session)):
@@ -486,8 +624,8 @@ class RasterConverter(object):
         
         # Create statement
         statement = '''
-                    SELECT ST_AsGDALRaster({0}, '{1}'{5}{6})
-                    FROM {2} WHERE {3}={4};
+                    SELECT ST_AsGDALRaster("{0}", '{1}'{5}{6})
+                    FROM "{2}" WHERE "{3}"={4};
                     '''.format(rasterFieldName, gdalFormat, tableName, rasterIdFieldName, rasterId,  options, srid)
         
         # Execute query
@@ -497,9 +635,9 @@ class RasterConverter(object):
         
     @classmethod
     def supportedGdalRasterFormats(cls, sqlAlchemyEngineOrSession):
-        '''
+        """
         Return a list of the supported GDAL raster formats.
-        '''
+        """
         if isinstance(sqlAlchemyEngineOrSession, Engine):
             # Create sqlalchemy session
             sessionMaker = sessionmaker(bind=sqlAlchemyEngineOrSession)
@@ -520,19 +658,19 @@ class RasterConverter(object):
         return supported
         
     def setColorRamp(self, colorRamp=None):
-        '''
+        """
         Set the color ramp of the raster converter instance
-        '''
+        """
         if not colorRamp:
             self._colorRamp = RasterConverter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
         else:
             self._colorRamp = colorRamp
               
     def setDefaultColorRamp(self, ramp=COLOR_RAMP_HUE):
-        '''
+        """
         Returns the color ramp as a list of RGB tuples
-        '''
-        hue     = [(255, 0, 255), (231, 0, 255), (208, 0, 255), (185, 0, 255), (162, 0, 255), (139, 0, 255), (115, 0, 255), (92, 0, 255), (69, 0, 255), (46, 0, 255), (23, 0, 255),        # magenta to blue
+        """
+        hue = [(255, 0, 255), (231, 0, 255), (208, 0, 255), (185, 0, 255), (162, 0, 255), (139, 0, 255), (115, 0, 255), (92, 0, 255), (69, 0, 255), (46, 0, 255), (23, 0, 255),        # magenta to blue
                    (0, 0, 255), (0, 23, 255), (0, 46, 255), (0, 69, 255), (0, 92, 255), (0, 115, 255), (0, 139, 255), (0, 162, 255), (0, 185, 255), (0, 208, 255), (0, 231, 255),          # blue to cyan
                    (0, 255, 255), (0, 255, 231), (0, 255, 208), (0, 255, 185), (0, 255, 162), (0, 255, 139), (0, 255, 115), (0, 255, 92), (0, 255, 69), (0, 255, 46), (0, 255, 23),        # cyan to green
                    (0, 255, 0), (23, 255, 0), (46, 255, 0), (69, 255, 0), (92, 255, 0), (115, 255, 0), (139, 255, 0), (162, 255, 0), (185, 255, 0), (208, 255, 0), (231, 255, 0),          # green to yellow
@@ -559,10 +697,10 @@ class RasterConverter(object):
             self._colorRamp = aqua
 
     def setCustomColorRamp(self, colors=[], interpolatedPoints=10):
-        '''
+        """
         Accepts a list of RGB tuples and interpolates between them to create a custom color ramp.
         Returns the color ramp as a list of RGB tuples.
-        '''
+        """
         if not (isinstance(colors, list)):
             print 'COLOR RAMP GENERATOR WARNING: colors must be passed in as a list of RGB tuples.'
             raise
@@ -600,10 +738,10 @@ class RasterConverter(object):
         self._colorRamp = colorRamp
 
     def getColorRampInterpolationParameters(self, session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha):
-        '''
+        """
         Creates color ramp based on min and max values of raster pixels. If pixel value is one of the no data values
         it will be excluded in the color ramp interpolation. Returns colorRamp, slope, intercept
-        '''
+        """
         # Get min and max for raster band 1
         statement = '''
                 SELECT {2}, (stats).min, (stats).max
@@ -619,10 +757,9 @@ class RasterConverter(object):
         for row in result:
             minValue = math.trunc(row.min)
             maxValue = math.ceil(row.max)
-            print minValue, maxValue
         
         # Set the no data value if min is -1 or 0
-        if ((float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN)):
+        if (float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN):
             statement = '''
                     UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
                     WHERE {2} = {3};
@@ -661,11 +798,3 @@ class RasterConverter(object):
         
         # Return color ramp, slope, and intercept to interpolate by value
         return colorRamp, slope, intercept
-
-            
-        
-        
-                                                                                                         
-        
-   
-   
