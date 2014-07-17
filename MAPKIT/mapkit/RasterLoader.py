@@ -142,11 +142,16 @@ class RasterLoader(object):
         if noDataValue is None:
             noDataValue = 'NULL'
 
+        # Cell size in the Y direction must be negative
+        if cellSizeY > 0:
+            print 'RASTER LOADER WARNING: cellSizeY should be defined as negative.'
+            cellSizeY = -1 * cellSizeY
+
         # Create the SQL statement
         statement = '''
                     SELECT ST_SetValues(
                         ST_AddBand(
-                            ST_MakeEmptyRaster({0}::integer, {1}::integer, {2}::float8, {3}::float8, {4}::float8, {5}::float8, {6}::float8, {7}::float8, {8}::integer),
+                            ST_MakeEmptyRaster({0}::integer, {1}::integer, {2}, {3}, {4}, {5}, {6}, {7}, {8}::integer),
                             1::integer, '32BF'::text, {9}::double precision, {10}::double precision
                         ),
                         1, 1, 1, ARRAY{11}::double precision[][]

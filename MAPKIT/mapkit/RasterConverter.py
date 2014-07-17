@@ -10,10 +10,13 @@
 import math
 from xml.dom import minidom
 import xml.etree.ElementTree as ET
+from datetime import timedelta
 
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm.session import Session
+import time
+
 
 class RasterConverter(object):
     """
@@ -62,7 +65,8 @@ class RasterConverter(object):
             raise
         
         # Get color ramp and interpolation parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
+        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId,
+                                                                               rasterIdFieldName, rasterFieldName)
         
         # Get polygons for each cell in kml format
         statement = '''
@@ -172,7 +176,8 @@ class RasterConverter(object):
             raise
         
         # Get color ramp and interpolation parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
+        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId,
+                                                                               rasterIdFieldName, rasterFieldName)
         
         # Get a set of polygons representing cluster of adjacent cells with the same value
         statement = '''
@@ -270,7 +275,8 @@ class RasterConverter(object):
         """
         
         # Get the color ramp and parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
+        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId,
+                                                                               rasterIdFieldName, rasterFieldName)
         
         # Convert color ramp to format the database can use
         rampList = []
@@ -386,15 +392,28 @@ class RasterConverter(object):
         
         return ET.tostring(kml), binaryPNG
        
-    def getAsKmlGridAnimation(self, tableName, timeStampedRasters=[], rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
+    def getAsKmlGridAnimation(self, tableName, timeStampedRasters=[], rasterIdFieldName='id', rasterFieldName='raster',
+                              documentName='default', alpha=1.0,  noDataValue=0):
         """
         Return a sequence of rasters with timestamps as a kml with time markers for animation.
+
         :param tableName: Name of the table to extract rasters from
-        :param timeStampedRasters: List of dictionaries with keys: rasterId, beginDateTime, endDateTime
-        :param rasterIdFieldName: Name of the id field for rasters
-        :param rasterFieldName: Name of the field where rasters are stored
+        :param timeStampedRasters: List of dictionaries with keys: rasterId, dateTime
+               rasterId = a unique integer identifier used to locate the raster (usually value of primary key column)
+               dateTime = a datetime object representing the time the raster occurs
+
+               e.g:
+               timeStampedRasters = [{ 'rasterId': 1, 'dateTime': datetime(1970, 1, 1)},
+                                     { 'rasterId': 2, 'dateTime': datetime(1970, 1, 2)},
+                                     { 'rasterId': 3, 'dateTime': datetime(1970, 1, 3)}]
+
+        :param rasterIdFieldName: Name of the id field for rasters (usually the primary key field)
+        :param rasterFieldName: Name of the field where rasters are stored (of type raster)
+        :param documentName: The name to give to the KML document (will be listed in legend under this name)
         :param alpha: The transparency to apply to each raster cell
-        :param documentName: The name to give to the KML document (will be listed in legend under this name
+        :param noDataValue: The value to be used as the no data value (default is 0)
+
+        :rtype : string
         """
 
         # Validate alpha
@@ -402,42 +421,63 @@ class RasterConverter(object):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
             raise
 
+        rasterIds = []
+
+        for timeStampedRaster in timeStampedRasters:
+            # Validate dictionary
+            if 'rasterId' not in timeStampedRaster:
+                print 'RASTER CONVERSION ERROR: rasterId must be provided for each raster.'
+                raise
+            elif 'dateTime' not in timeStampedRaster:
+                print 'RASTER CONVERSION ERROR: dateTime must be provided for each raster.'
+                raise
+
+            rasterIds.append(str(timeStampedRaster['rasterId']))
+
+        # One color ramp to rule them all
+        # Get a single color ramp that is based on the range of values in all the rasters
+        colorRamp, slope, intercept = self.getColorRampInterpolationParametersMultiple(session=self._session,
+                                                                                       tableName=tableName,
+                                                                                       rasterIds=rasterIds,
+                                                                                       rasterIdFieldName=rasterIdFieldName,
+                                                                                       rasterFieldName=rasterFieldName,
+                                                                                       noDataValue=noDataValue)
+
+        # Calculate delta time between images
+        time1 = timeStampedRasters[0]['dateTime']
+        time2 = timeStampedRasters[1]['dateTime']
+        deltaTime = time2 - time1
+
         # Initialize KML Document
         kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
         document = ET.SubElement(kml, 'Document')
         docName = ET.SubElement(document, 'name')
         docName.text = documentName
 
+        # Apply special style to hide legend items
+        style = ET.SubElement(document, 'Style', id='check-hide-children')
+        listStyle = ET.SubElement(style, 'ListStyle')
+        listItemType = ET.SubElement(listStyle, 'listItemType')
+        listItemType.text = 'checkHideChildren'
+        styleUrl = ET.SubElement(document, 'styleUrl')
+        styleUrl.text = '#check-hide-children'
+
         # Retrieve the rasters and styles
         for timeStampedRaster in timeStampedRasters:
-            # Validate dictionary
-            if 'rasterId' not in timeStampedRaster:
-                print 'RASTER CONVERSION ERROR: rasterId must be provided for each raster.'
-                raise
-            elif 'beginDateTime' not in timeStampedRaster:
-                print 'RASTER CONVERSION ERROR: startDateTime must be provided for each raster.'
-                raise
-            elif 'endDateTime' not in timeStampedRaster:
-                print 'RASTER CONVERSION ERROR: endDateTime must be provided for each raster.'
-                raise
-
-            # Extract variable
+            # Extract variables
             rasterId = timeStampedRaster['rasterId']
-            beginDateTime = timeStampedRaster['beginDateTime']
-            endDateTime = timeStampedRaster['endDateTime']
-
-            # Determine styles
-            colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha)
+            dateTime = timeStampedRaster['dateTime']
+            prevDateTime = dateTime - deltaTime
 
             # Get polygons for each cell in kml format
             statement = '''
                         SELECT x, y, val, ST_AsKML(geom) AS polygon
                         FROM (
-                        SELECT (ST_PixelAsPolygons(%s)).*
-                        FROM %s WHERE %s=%s
+                        SELECT (ST_PixelAsPolygons({0})).*
+                        FROM {1} WHERE {2}={3}
                         ) AS foo
                         ORDER BY val;
-                        ''' % (rasterFieldName, tableName, rasterIdFieldName, rasterId)
+                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
 
             result = self._session.execute(statement)
 
@@ -496,13 +536,11 @@ class RasterConverter(object):
                         # Create TimeSpan tag
                         timeSpan = ET.SubElement(placemark, 'TimeSpan')
 
-                        # Create begin and end tags
+                        # Create begin tag
                         begin = ET.SubElement(timeSpan, 'begin')
-                        # end = ET.SubElement(timeSpan, 'end')
-
-                        # Assign value to begin and end tags
-                        begin.text = beginDateTime.strftime('%Y-%m-%dT%H:%M:%S')
-                        # end.text = endDateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                        begin.text = prevDateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                        end = ET.SubElement(timeSpan, 'end')
+                        end.text = dateTime.strftime('%Y-%m-%dT%H:%M:%S')
 
                         # Create multigeometry tag
                         multigeometry = ET.SubElement(placemark, 'MultiGeometry')
@@ -523,6 +561,10 @@ class RasterConverter(object):
                         valueJ = ET.SubElement(jData, 'value')
                         valueJ.text = str(j)
 
+                        tData = ET.SubElement(extendedData, 'Data', name='t')
+                        valueT = ET.SubElement(tData, 'value')
+                        valueT.text = dateTime.strftime('%Y-%m-%dT%H:%M:%S')
+
                         groupValue = value
 
                     # Get polygon object from kml string and append to the current multigeometry group
@@ -530,6 +572,244 @@ class RasterConverter(object):
                     multigeometry.append(polygon)
 
         return ET.tostring(kml)
+
+    def getAsKmlPngAnimation(self, tableName, timeStampedRasters=[], rasterIdFieldName='id', rasterFieldName='raster',
+                             documentName='default', noDataValue=0, alpha=1.0, drawOrder=0, cellSize=None,
+                             resampleMethod='NearestNeighbour'):
+        """
+        Return a sequence of rasters with timestamps as a kml with time markers for animation.
+
+        :param tableName: Name of the table to extract rasters from
+        :param timeStampedRasters: List of dictionaries with keys: rasterId, dateTime
+               rasterId = a unique integer identifier used to locate the raster (usually value of primary key column)
+               dateTime = a datetime object representing the time the raster occurs
+
+               e.g:
+               timeStampedRasters = [{ 'rasterId': 1, 'dateTime': datetime(1970, 1, 1)},
+                                     { 'rasterId': 2, 'dateTime': datetime(1970, 1, 2)},
+                                     { 'rasterId': 3, 'dateTime': datetime(1970, 1, 3)}]
+
+        :param rasterIdFieldName: Name of the id field for rasters (usually the primary key field)
+        :param rasterFieldName: Name of the field where rasters are stored (of type raster)
+        :param documentName: The name to give to the KML document (will be listed in legend under this name)
+        :param noDataValue: The value to be used as the no data value (default is 0)
+        :param alpha: The transparency to apply to each raster cell
+        :param drawOrder: The draw order determines the order images are stacked if multiple are showing.
+        :param cellSize: Specify this parameter to resample the rasters to a different size the cells (e.g.: 30 to
+                         resample to cells with dimensions 30 x 30 in units of the raster spatial reference system).
+                         NOTE: the processing time increases exponentially with shrinking cellSize values.
+
+        :rtype : (string, list)
+
+        """
+        VALID_RESAMPLE_METHODS = ('NearestNeighbour', 'Bilinear', 'Cubic', 'CubicSpline', 'Lanczos')
+
+        # Validate
+        if resampleMethod not in VALID_RESAMPLE_METHODS:
+            print 'RASTER CONVERSION ERROR: {0} is not a valid resampleMethod. Please use either {1}'.\
+                format(resampleMethod, ', '.join(VALID_RESAMPLE_METHODS))
+
+        if cellSize is not None:
+            if not self.isNumber(cellSize):
+                print 'RASTER CONVERSION ERROR: cellSize must be a number or None.'
+                raise
+
+        if not self.isNumber(noDataValue):
+            print 'RASTER CONVERSION ERROR: noDataValue must be a number.'
+            raise
+
+        if not self.isNumber(drawOrder):
+            print 'RASTER CONVERSION ERROR: drawOrder must be a number.'
+            raise
+
+        if not (alpha >= 0 and alpha <= 1.0):
+            print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
+            raise
+
+
+        # Extract raster Ids and validate
+        rasterIds = []
+
+        for timeStampedRaster in timeStampedRasters:
+            # Validate dictionary
+            if 'rasterId' not in timeStampedRaster:
+                print 'RASTER CONVERSION ERROR: rasterId must be provided for each raster.'
+                raise
+            elif 'dateTime' not in timeStampedRaster:
+                print 'RASTER CONVERSION ERROR: dateTime must be provided for each raster.'
+                raise
+
+            rasterIds.append(str(timeStampedRaster['rasterId']))
+
+        # Assemble rasters ids into string
+        rasterIdsString = '({0})'.format(', '.join(rasterIds))
+
+        # Get the color ramp and parameters
+        colorRamp, slope, intercept = self.getColorRampInterpolationParametersMultiple(session=self._session,
+                                                                                       tableName=tableName,
+                                                                                       rasterIds=rasterIds,
+                                                                                       rasterIdFieldName=rasterIdFieldName,
+                                                                                       rasterFieldName=rasterFieldName,
+                                                                                       noDataValue=noDataValue)
+
+        # Convert color ramp to format the database can use
+        rampList = []
+
+        for index in range(len(colorRamp)):
+            rampIndex = len(colorRamp) - index - 1
+            valueForIndex = (rampIndex - intercept) / slope
+            rgb = colorRamp[rampIndex]
+            rampList.append('{0} {1} {2} {3} {4}'.format(valueForIndex, rgb[0], rgb[1], rgb[2], int(alpha * 255)))
+
+        # Add a line for the no-data values (nv)
+        rampList.append('nv 0 0 0 0')
+
+        # Join strings in list to create ramp
+        rampString = '\n'.join(rampList)
+
+
+        # Get a PNG representation of each raster
+        if cellSize is not None:
+            statement = '''
+                        SELECT ST_AsPNG(ST_Transform(ST_ColorMap(ST_Rescale({0}, {5}, '{6}'), 1, '{4}'), 4326, 'Bilinear')) As png
+                        FROM {1}
+                        WHERE {2} IN {3};
+                        '''.format(rasterFieldName,
+                                   tableName,
+                                   rasterIdFieldName,
+                                   rasterIdsString,
+                                   rampString,
+                                   cellSize,
+                                   resampleMethod)
+        else:
+            statement = '''
+                        SELECT ST_AsPNG(ST_Transform(ST_ColorMap({0}, 1, '{4}'), 4326, 'Bilinear')) As png
+                        FROM {1}
+                        WHERE {2} IN {3};
+                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterIdsString, rampString)
+
+        result = self._session.execute(statement)
+
+        binaryPNGs = []
+
+        for row in result:
+            binaryPNGs.append(row.png)
+
+        # Determine extents for the KML wrapper file via query
+        statement = '''
+                    SELECT (foo.metadata).*
+                    FROM (
+                    SELECT ST_MetaData(ST_Transform({0}, 4326, 'Bilinear')) as metadata
+                    FROM {1}
+                    WHERE {2}={3}
+                    ) As foo;
+                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterIds[0])
+
+        result = self._session.execute(statement)
+
+        for row in result:
+            upperLeftY = row.upperlefty
+            scaleY = row.scaley
+            height = row.height
+
+            upperLeftX = row.upperleftx
+            scaleX = row.scalex
+            width = row.width
+
+        north = upperLeftY
+        south = upperLeftY + (scaleY * height)
+        east = upperLeftX + (scaleX * width)
+        west = upperLeftX
+
+        # Calculate delta time between images
+        time1 = timeStampedRasters[0]['dateTime']
+        time2 = timeStampedRasters[1]['dateTime']
+        deltaTime = time2 - time1
+
+        # Initialize KML Document
+        kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
+        document = ET.SubElement(kml, 'Document')
+        docName = ET.SubElement(document, 'name')
+        docName.text = documentName
+
+        # Apply special style to hide legend items
+        style = ET.SubElement(document, 'Style', id='check-hide-children')
+        listStyle = ET.SubElement(style, 'ListStyle')
+        listItemType = ET.SubElement(listStyle, 'listItemType')
+        listItemType.text = 'checkHideChildren'
+        styleUrl = ET.SubElement(document, 'styleUrl')
+        styleUrl.text = '#check-hide-children'
+
+        for index, timeStampedRaster in enumerate(timeStampedRasters):
+            # Extract variable
+            dateTime = timeStampedRaster['dateTime']
+            prevDateTime = dateTime - deltaTime
+
+
+            # GroundOverlay
+            groundOverlay = ET.SubElement(document, 'GroundOverlay')
+            overlayName = ET.SubElement(groundOverlay, 'name')
+            overlayName.text = 'Overlay'
+
+            # Create TimeSpan tag
+            timeSpan = ET.SubElement(groundOverlay, 'TimeSpan')
+
+            # Create begin tag
+            begin = ET.SubElement(timeSpan, 'begin')
+            begin.text = prevDateTime.strftime('%Y-%m-%dT%H:%M:%S')
+            end = ET.SubElement(timeSpan, 'end')
+            end.text = dateTime.strftime('%Y-%m-%dT%H:%M:%S')
+
+            # DrawOrder
+            drawOrderElement = ET.SubElement(groundOverlay, 'drawOrder')
+            drawOrderElement.text = str(drawOrder)
+
+            # Define Region
+            regionElement = ET.SubElement(groundOverlay, 'Region')
+            latLonBox = ET.SubElement(regionElement, 'LatLonBox')
+
+            northElement = ET.SubElement(latLonBox, 'north')
+            northElement.text = str(north)
+
+            southElement = ET.SubElement(latLonBox, 'south')
+            southElement.text = str(south)
+
+            eastElement = ET.SubElement(latLonBox, 'east')
+            eastElement.text = str(east)
+
+            westElement = ET.SubElement(latLonBox, 'west')
+            westElement.text = str(west)
+
+            # Href to PNG
+            iconElement = ET.SubElement(groundOverlay, 'Icon')
+            hrefElement = ET.SubElement(iconElement, 'href')
+            hrefElement.text = 'raster{0}.png'.format(index)
+
+            # LatLonBox
+            latLonBox = ET.SubElement(groundOverlay, 'LatLonBox')
+
+            northElement = ET.SubElement(latLonBox, 'north')
+            northElement.text = str(north)
+
+            southElement = ET.SubElement(latLonBox, 'south')
+            southElement.text = str(south)
+
+            eastElement = ET.SubElement(latLonBox, 'east')
+            eastElement.text = str(east)
+
+            westElement = ET.SubElement(latLonBox, 'west')
+            westElement.text = str(west)
+
+        # Append ramp to kml file for reference later
+        extendedDataElement = ET.SubElement(document, 'ExtendedData')
+        for ramp in rampList:
+            dataElement = ET.SubElement(extendedDataElement, 'Data', name='vrgba')
+            dataValueElement = ET.SubElement(dataElement, 'value')
+            dataValueElement.text = ramp
+
+        return ET.tostring(kml), binaryPNGs
+
+
         
     def getAsGrassAsciiRaster(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', newSRID=None):
         """
@@ -737,10 +1017,18 @@ class RasterConverter(object):
                 
         self._colorRamp = colorRamp
 
-    def getColorRampInterpolationParameters(self, session, tableName, rasterId, rasterIdFieldName, rasterFieldName, alpha):
+    def getColorRampInterpolationParameters(self, session, tableName, rasterId, rasterIdFieldName, rasterFieldName):
         """
         Creates color ramp based on min and max values of raster pixels. If pixel value is one of the no data values
         it will be excluded in the color ramp interpolation. Returns colorRamp, slope, intercept
+
+        :param session: SQLAlchemy session object. Must be linked to a PostGIS enabled database
+        :param tableName: Name of the table to extract rasters from
+        :param rasterId: the raster id to perform the interpolation on
+        :param rasterIdFieldName: Name of the id field for rasters (usually the primary key field)
+        :param rasterFieldName: Name of the field where rasters are stored (of type raster)
+
+        :rtype : (colorRamp, float, float)
         """
         # Get min and max for raster band 1
         statement = '''
@@ -798,3 +1086,88 @@ class RasterConverter(object):
         
         # Return color ramp, slope, and intercept to interpolate by value
         return colorRamp, slope, intercept
+
+    def getColorRampInterpolationParametersMultiple(self, session, tableName, rasterIds, rasterIdFieldName, rasterFieldName, noDataValue=0):
+        """
+        Creates color ramp based on min and max values of all the raster pixels from all rasters. If pixel value is one
+        of the no data values it will be excluded in the color ramp interpolation. Returns colorRamp, slope, intercept
+
+        :param session: SQLAlchemy session object. Must be linked to a PostGIS enabled database
+        :param tableName: Name of the table to extract rasters from
+        :param rasterIds: List of raster ids to create ramp for
+        :param rasterIdFieldName: Name of the id field for rasters (usually the primary key field)
+        :param rasterFieldName: Name of the field where rasters are stored (of type raster)
+
+        :rtype : (colorRamp, float, float)
+        """
+        # Assemble rasters ids into string
+        rasterIdsString = '({0})'.format(', '.join(rasterIds))
+
+        for rasterId in rasterIds:
+            statement = '''
+                        UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
+                        WHERE {2} = {3};
+                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, noDataValue)
+
+            session.execute(statement)
+
+        # Get min and max for raster band 1
+        statement = '''
+                SELECT {2}, (stats).min, (stats).max
+                FROM (
+                SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
+                FROM {1}
+                WHERE {2} IN {3}
+                ) As foo;
+                '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterIdsString)
+
+        result = self._session.execute(statement)
+
+        # extract the stats
+        minValues = []
+        maxValues = []
+        for row in result:
+            if row.min is not None:
+                minValues.append(row.min)
+            if row.max is not None:
+                maxValues.append(row.max)
+
+        # In the case of no min or max values, assume 0 and 1, respectively
+        try:
+            minValue = min(minValues)
+        except ValueError:
+            minValue = 0
+
+        try:
+            maxValue = max(maxValues)
+        except ValueError:
+            maxValue = 1
+
+        # Map color ramp indicies to values
+        colorRamp = self._colorRamp
+        minRampIndex = 0.0 # Always zero
+        maxRampIndex = float(len(colorRamp) - 1) # Map color ramp indices to values using equation of a line
+
+        # Resulting equation will be:
+        # rampIndex = slope * value + intercept
+        if minValue != maxValue:
+            slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
+            intercept = maxRampIndex - (slope * maxValue)
+        else:
+            slope = 0
+            intercept = minRampIndex
+
+        # Return color ramp, slope, and intercept to interpolate by value
+        return colorRamp, slope, intercept
+
+    def isNumber(self, value):
+        """
+        Validate whether a value is a number or not
+        """
+        try:
+            str(value)
+            float(value)
+            return True
+
+        except ValueError:
+            return False
