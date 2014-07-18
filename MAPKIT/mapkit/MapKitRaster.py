@@ -27,5 +27,3 @@ class MapKitRaster(Base):
         return '<MapKitRaster(filename={0}, timestamp={1}, raster={2}>'.format(self.filename,
                                                                               self.timestamp,
                                                                               self.raster)
-
-        

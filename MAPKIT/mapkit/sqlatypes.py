@@ -21,3 +21,15 @@ class Raster(types.UserDefinedType):
         
     def get_col_spec(self):
         return 'raster'
+
+class Geometry(types.UserDefinedType):
+    '''
+    Geometry Column Type for SQLAlchemy
+    '''
+    def __init__(self):
+        '''
+        Constructor
+        '''
+
+    def get_col_spec(self):
+        return 'geometry'
