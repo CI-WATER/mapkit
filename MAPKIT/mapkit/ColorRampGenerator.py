@@ -48,6 +48,13 @@ class MappedColorRamp(object):
         # Add a line for the no-data values (nv)
         self.vrgbaList.append('nv 0 0 0 0')
 
+    def __repr__(self):
+        return '<MappedColorRamp Slope={0}, Intercept={1}, MinValue={2}, MaxValue={3}, Alpha={4}>'.format(self.slope,
+                                                                                                          self.intercept,
+                                                                                                          self.min,
+                                                                                                          self.max,
+                                                                                                          self.alpha)
+
     def getColorForIndex(self, index):
         """
         Return color for given index
