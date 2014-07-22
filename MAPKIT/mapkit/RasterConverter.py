@@ -48,7 +48,7 @@ class RasterConverter(object):
         else:
             self._colorRamp = colorRamp
 
-    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default', noDataValue=0):
+    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', documentName='default', alpha=1.0, noDataValue=0):
         """
         Creates a KML file with each cell in the raster represented by a polygon. The result is a vector grid representation of the raster.
         Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
@@ -168,8 +168,7 @@ class RasterConverter(object):
         
         return ET.tostring(kml)
     
-    def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster',
-                         documentName='default', alpha=1.0,  noDataValue=0):
+    def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', documentName='default', alpha=1.0,  noDataValue=0):
         """
         Creates a KML file where adjacent cells with the same value are clustered together into a polygons. The result is a vector representation
         of each cluster. Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.

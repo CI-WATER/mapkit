@@ -61,7 +61,17 @@ class MappedColorRamp(object):
         :param value: Lookup value
         :rtype: tuple of RGB integer values
         """
-        rampIndex = self.getIndexForValue(value)
+        rampIndex = 0
+
+        if value >= self.min and value <= self.max:
+            rampIndex = self.getIndexForValue(value)
+
+        elif value > self.max:
+            rampIndex = -1
+
+        elif value < self.min:
+            rampIndex = 0
+
         return self.getColorForIndex(rampIndex)
 
     def getIndexForValue(self, value):
@@ -71,15 +81,6 @@ class MappedColorRamp(object):
         :rtype: int
         """
         return math.trunc(self.slope * float(value) + self.intercept)
-
-    def getColorForValue(self, value):
-        """
-        Return a color tuple give a value within the range of mapped values
-        :param value: Lookup value
-        :rtype: tuple of RGB integer values
-        """
-        rampIndex = self.getIndexForValue(value)
-        return self.getColorForIndex(rampIndex)
 
     def getAlphaAsInteger(self):
         """
@@ -186,76 +187,6 @@ class ColorRampGenerator(object):
         colorRamp.append(colors[-1])
 
         return colorRamp
-
-    def getColorRampInterpolationParameters(self, session, colorRamp, tableName, rasterId, rasterIdFieldName, rasterFieldName):
-        """
-        Creates color ramp based on min and max values of raster pixels. If pixel value is one of the no data values
-        it will be excluded in the color ramp interpolation. Returns colorRamp, slope, intercept
-
-        :param session: SQLAlchemy session object. Must be linked to a PostGIS enabled database
-        :param tableName: Name of the table to extract rasters from
-        :param rasterId: the raster id to perform the interpolation on
-        :param rasterIdFieldName: Name of the id field for rasters (usually the primary key field)
-        :param rasterFieldName: Name of the field where rasters are stored (of type raster)
-
-        :rtype : (colorRamp, float, float)
-        """
-        # Get min and max for raster band 1
-        statement = '''
-                SELECT {2}, (stats).min, (stats).max
-                FROM (
-                SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
-                FROM {1}
-                WHERE {2}={3}
-                ) As foo;
-                '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-        result = self._session.execute(statement)
-
-        # extract the stats
-        for row in result:
-            minValue = math.trunc(row.min)
-            maxValue = math.ceil(row.max)
-
-        # Set the no data value if min is -1 or 0
-        if (float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN):
-            statement = '''
-                    UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
-                    WHERE {2} = {3};
-                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, float(minValue))
-            session.execute(statement)
-
-            # Pull the stats again with no data value set
-            statement = '''
-                SELECT {2}, (stats).min, (stats).max
-                FROM (
-                SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
-                FROM {1}
-                WHERE {2}={3}
-                ) As foo;
-                '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-            result = session.execute(statement)
-
-            # extract the stats
-            for row in result:
-                minValue = row.min
-                maxValue = row.max
-
-        # Map color ramp indicies to values
-        colorRamp = self._colorRamp
-        minRampIndex = 0.0 # Always zero
-        maxRampIndex = float(len(colorRamp) - 1) # Map color ramp indices to values using equation of a line
-
-        # Resulting equation will be:
-        # rampIndex = slope * value + intercept
-        if minValue != maxValue:
-            slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
-            intercept = maxRampIndex - (slope * maxValue)
-        else:
-            slope = 0
-            intercept = minRampIndex
-
-        # Return color ramp, slope, and intercept to interpolate by value
-        return colorRamp, slope, intercept
 
     @classmethod
     def mapColorRampToValues(cls, colorRamp, minValue, maxValue, alpha=1.0):
