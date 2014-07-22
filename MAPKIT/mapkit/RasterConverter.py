@@ -9,14 +9,13 @@
 """
 
 import math
-from xml.dom import minidom
 import xml.etree.ElementTree as ET
-from datetime import timedelta
 
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm.session import Session
-import time
+
+from mapkit.ColorRampGenerator import ColorRampGenerator, ColorRampEnum
 
 
 class RasterConverter(object):
@@ -33,11 +32,6 @@ class RasterConverter(object):
     NO_DATA_VALUE_MIN = float(-1.0)
     NO_DATA_VALUE_MAX = float(0.0)
     
-    # Color Ramp Identifiers
-    COLOR_RAMP_HUE = 0
-    COLOR_RAMP_TERRAIN = 1
-    COLOR_RAMP_AQUA = 2
-    
     def __init__(self, sqlAlchemyEngineOrSession, colorRamp=None):
         """
         Constructor
@@ -50,11 +44,11 @@ class RasterConverter(object):
             self._session = sqlAlchemyEngineOrSession        
         
         if not colorRamp:
-            self.setDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
+            self.setDefaultColorRamp(ColorRampEnum.COLOR_RAMP_HUE)
         else:
             self._colorRamp = colorRamp
 
-    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
+    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default', noDataValue=0):
         """
         Creates a KML file with each cell in the raster represented by a polygon. The result is a vector grid representation of the raster.
         Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
@@ -65,9 +59,18 @@ class RasterConverter(object):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
             raise
         
-        # Get color ramp and interpolation parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId,
-                                                                               rasterIdFieldName, rasterFieldName)
+        # Get the color ramp and parameters
+        minValue, maxValue = self.getMinMaxOfRasters(session=self._session,
+                                                     table=tableName,
+                                                     rasterIds=(str(rasterId), ),
+                                                     rasterIdField=rasterIdFieldName,
+                                                     rasterField=rasterFieldName,
+                                                     noDataValue=noDataValue)
+
+        mappedColorRamp = ColorRampGenerator.mapColorRampToValues(colorRamp=self._colorRamp,
+                                                                  minValue=minValue,
+                                                                  maxValue=maxValue,
+                                                                  alpha=alpha)
         
         # Get polygons for each cell in kml format
         statement = '''
@@ -125,15 +128,15 @@ class RasterConverter(object):
                     polyStyle = ET.SubElement(style, 'PolyStyle')
                     polyColor = ET.SubElement(polyStyle, 'color')
                     
-                    # Get ramp index for polygon fill color
-                    rampIndex = math.trunc(slope * float(value) + intercept)
-                    
                     # Convert alpha from 0.0-1.0 decimal to 00-FF string
-                    integerAlpha = int(alpha * self.MAX_HEX_DECIMAL)
+                    integerAlpha = mappedColorRamp.getAlphaAsInteger()
                     
                     # Get RGB color from color ramp and convert to KML hex ABGR string with alpha
-                    integerRGB = colorRamp[rampIndex]
-                    hexABGR = '%02X%02X%02X%02X' % (integerAlpha, integerRGB[2], integerRGB[1], integerRGB[0])
+                    integerRGB = mappedColorRamp.getColorForValue(value)
+                    hexABGR = '%02X%02X%02X%02X' % (integerAlpha,
+                                                    integerRGB[mappedColorRamp.B],
+                                                    integerRGB[mappedColorRamp.G],
+                                                    integerRGB[mappedColorRamp.R])
                     
                     # Set the polygon fill alpha and color
                     polyColor.text = hexABGR
@@ -165,7 +168,8 @@ class RasterConverter(object):
         
         return ET.tostring(kml)
     
-    def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default'):
+    def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster',
+                         documentName='default', alpha=1.0,  noDataValue=0):
         """
         Creates a KML file where adjacent cells with the same value are clustered together into a polygons. The result is a vector representation
         of each cluster. Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
@@ -175,10 +179,19 @@ class RasterConverter(object):
         if not (alpha >= 0 and alpha <= 1.0):
             print "RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0."
             raise
-        
-        # Get color ramp and interpolation parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId,
-                                                                               rasterIdFieldName, rasterFieldName)
+
+        # Get the color ramp and parameters
+        minValue, maxValue = self.getMinMaxOfRasters(session=self._session,
+                                                     table=tableName,
+                                                     rasterIds=(str(rasterId), ),
+                                                     rasterIdField=rasterIdFieldName,
+                                                     rasterField=rasterFieldName,
+                                                     noDataValue=noDataValue)
+
+        mappedColorRamp = ColorRampGenerator.mapColorRampToValues(colorRamp=self._colorRamp,
+                                                                  minValue=minValue,
+                                                                  maxValue=maxValue,
+                                                                  alpha=alpha)
         
         # Get a set of polygons representing cluster of adjacent cells with the same value
         statement = '''
@@ -233,15 +246,15 @@ class RasterConverter(object):
                     polyStyle = ET.SubElement(style, 'PolyStyle')
                     polyColor = ET.SubElement(polyStyle, 'color')
                     
-                    # Get ramp index for polygon fill color
-                    rampIndex = math.trunc(slope * float(value) + intercept)
-                    
                     # Convert alpha from 0.0-1.0 decimal to 00-FF string
-                    integerAlpha = int(alpha * self.MAX_HEX_DECIMAL)
+                    integerAlpha = mappedColorRamp.getAlphaAsInteger()
                     
                     # Get RGB color from color ramp and convert to KML hex ABGR string with alpha
-                    integerRGB = colorRamp[rampIndex]
-                    hexABGR = '%02X%02X%02X%02X' % (integerAlpha, integerRGB[2], integerRGB[1], integerRGB[0])
+                    integerRGB = mappedColorRamp.getColorForValue(value)
+                    hexABGR = '%02X%02X%02X%02X' % (integerAlpha,
+                                                    integerRGB[mappedColorRamp.B],
+                                                    integerRGB[mappedColorRamp.G],
+                                                    integerRGB[mappedColorRamp.R])
                     
                     # Set the polygon fill alpha and color
                     polyColor.text = hexABGR
@@ -266,7 +279,8 @@ class RasterConverter(object):
                 
         return ET.tostring(kml)
     
-    def getAsKmlPng(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', alpha=1.0, documentName='default', drawOrder=0):
+    def getAsKmlPng(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', documentName='default',
+                    alpha=1.0,  drawOrder=0, noDataValue=0, cellSize=None, resampleMethod='NearestNeighbour'):
         """
         Creates a KML wrapper and PNG representat of the raster. Returns a string of the kml file contents and
         a binary string of the PNG contents. The color ramp used to generate the PNG is embedded in the ExtendedData
@@ -276,32 +290,30 @@ class RasterConverter(object):
         """
         
         # Get the color ramp and parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParameters(self._session, tableName, rasterId,
-                                                                               rasterIdFieldName, rasterFieldName)
-        
-        # Convert color ramp to format the database can use
-        rampList = []
-        
-        for index in range(len(colorRamp)):
-            rampIndex = len(colorRamp) - index - 1
-            valueForIndex = math.trunc((rampIndex - intercept) / slope)
-            rgb = colorRamp[rampIndex]
-            rampList.append('{0} {1} {2} {3} {4}'.format(valueForIndex, rgb[0], rgb[1], rgb[2], int(alpha * 255)))
-        
-        # Add a line for the no-data values (nv)
-        rampList.append('nv 0 0 0 0')
+        minValue, maxValue = self.getMinMaxOfRasters(session=self._session,
+                                                     table=tableName,
+                                                     rasterIds=(str(rasterId), ),
+                                                     rasterIdField=rasterIdFieldName,
+                                                     rasterField=rasterFieldName,
+                                                     noDataValue=noDataValue)
+
+        mappedColorRamp = ColorRampGenerator.mapColorRampToValues(colorRamp=self._colorRamp,
+                                                                  minValue=minValue,
+                                                                  maxValue=maxValue,
+                                                                  alpha=alpha)
         
         # Join strings in list to create ramp
-        rampString = '\n'.join(rampList)
+        rampString = mappedColorRamp.getPostGisColorRampString()
         
         # Get a PNG representation of the raster
-        statement = '''
-                    SELECT ST_AsPNG(ST_Transform(ST_ColorMap({0}, 1, '{4}'), 4326, 'Bilinear')) As png
-                    FROM {1}
-                    WHERE {2}={3};
-                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, rampString)
-                    
-        result = self._session.execute(statement)
+        result = self.getRastersAsPngs(session=self._session,
+                                       tableName=tableName,
+                                       rasterIds=(str(rasterId),),
+                                       postGisRampString=rampString,
+                                       rasterField=rasterFieldName,
+                                       rasterIdField=rasterIdFieldName,
+                                       cellSize=cellSize,
+                                       resampleMethod=resampleMethod)
         
         for row in result:
             binaryPNG = row.png
@@ -386,10 +398,10 @@ class RasterConverter(object):
 
         # Append ramp to kml file for reference later
         extendedDataElement = ET.SubElement(groundOverlay, 'ExtendedData')
-        for ramp in rampList:
+        for vrgba in mappedColorRamp.getAsVrgbaList():
             dataElement = ET.SubElement(extendedDataElement, 'Data', name='vrgba')
             dataValueElement = ET.SubElement(dataElement, 'value')
-            dataValueElement.text = ramp
+            dataValueElement.text = vrgba
         
         return ET.tostring(kml), binaryPNG
        
@@ -437,12 +449,17 @@ class RasterConverter(object):
 
         # One color ramp to rule them all
         # Get a single color ramp that is based on the range of values in all the rasters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParametersMultiple(session=self._session,
-                                                                                       tableName=tableName,
-                                                                                       rasterIds=rasterIds,
-                                                                                       rasterIdFieldName=rasterIdFieldName,
-                                                                                       rasterFieldName=rasterFieldName,
-                                                                                       noDataValue=noDataValue)
+        minValue, maxValue = self.getMinMaxOfRasters(session=self._session,
+                                                     table=tableName,
+                                                     rasterIds=rasterIds,
+                                                     rasterIdField=rasterIdFieldName,
+                                                     rasterField=rasterFieldName,
+                                                     noDataValue=noDataValue)
+
+        mappedColorRamp = ColorRampGenerator.mapColorRampToValues(colorRamp=self._colorRamp,
+                                                                  minValue=minValue,
+                                                                  maxValue=maxValue,
+                                                                  alpha=alpha)
 
         # Calculate delta time between images
         time1 = timeStampedRasters[0]['dateTime']
@@ -521,15 +538,15 @@ class RasterConverter(object):
                         polyStyle = ET.SubElement(style, 'PolyStyle')
                         polyColor = ET.SubElement(polyStyle, 'color')
 
-                        # Get ramp index for polygon fill color
-                        rampIndex = math.trunc(slope * float(value) + intercept)
-
                         # Convert alpha from 0.0-1.0 decimal to 00-FF string
-                        integerAlpha = int(alpha * self.MAX_HEX_DECIMAL)
+                        integerAlpha = mappedColorRamp.getAlphaAsInteger()
 
                         # Get RGB color from color ramp and convert to KML hex ABGR string with alpha
-                        integerRGB = colorRamp[rampIndex]
-                        hexABGR = '%02X%02X%02X%02X' % (integerAlpha, integerRGB[2], integerRGB[1], integerRGB[0])
+                        integerRGB = mappedColorRamp.getColorForValue(value)
+                        hexABGR = '%02X%02X%02X%02X' % (integerAlpha,
+                                                        integerRGB[mappedColorRamp.B],
+                                                        integerRGB[mappedColorRamp.G],
+                                                        integerRGB[mappedColorRamp.R])
 
                         # Set the polygon fill alpha and color
                         polyColor.text = hexABGR
@@ -537,7 +554,7 @@ class RasterConverter(object):
                         # Create TimeSpan tag
                         timeSpan = ET.SubElement(placemark, 'TimeSpan')
 
-                        # Create begin tag
+                        # Create begin and end tags
                         begin = ET.SubElement(timeSpan, 'begin')
                         begin.text = prevDateTime.strftime('%Y-%m-%dT%H:%M:%S')
                         end = ET.SubElement(timeSpan, 'end')
@@ -574,6 +591,8 @@ class RasterConverter(object):
 
         return ET.tostring(kml)
 
+
+
     def getAsKmlPngAnimation(self, tableName, timeStampedRasters=[], rasterIdFieldName='id', rasterFieldName='raster',
                              documentName='default', noDataValue=0, alpha=1.0, drawOrder=0, cellSize=None,
                              resampleMethod='NearestNeighbour'):
@@ -603,17 +622,7 @@ class RasterConverter(object):
         :rtype : (string, list)
 
         """
-        VALID_RESAMPLE_METHODS = ('NearestNeighbour', 'Bilinear', 'Cubic', 'CubicSpline', 'Lanczos')
 
-        # Validate
-        if resampleMethod not in VALID_RESAMPLE_METHODS:
-            print 'RASTER CONVERSION ERROR: {0} is not a valid resampleMethod. Please use either {1}'.\
-                format(resampleMethod, ', '.join(VALID_RESAMPLE_METHODS))
-
-        if cellSize is not None:
-            if not self.isNumber(cellSize):
-                print 'RASTER CONVERSION ERROR: cellSize must be a number or None.'
-                raise
 
         if not self.isNumber(noDataValue):
             print 'RASTER CONVERSION ERROR: noDataValue must be a number.'
@@ -642,54 +651,32 @@ class RasterConverter(object):
 
             rasterIds.append(str(timeStampedRaster['rasterId']))
 
-        # Assemble rasters ids into string
-        rasterIdsString = '({0})'.format(', '.join(rasterIds))
-
         # Get the color ramp and parameters
-        colorRamp, slope, intercept = self.getColorRampInterpolationParametersMultiple(session=self._session,
-                                                                                       tableName=tableName,
-                                                                                       rasterIds=rasterIds,
-                                                                                       rasterIdFieldName=rasterIdFieldName,
-                                                                                       rasterFieldName=rasterFieldName,
-                                                                                       noDataValue=noDataValue)
+        minValue, maxValue = self.getMinMaxOfRasters(session=self._session,
+                                                     table=tableName,
+                                                     rasterIds=rasterIds,
+                                                     rasterIdField=rasterIdFieldName,
+                                                     rasterField=rasterFieldName,
+                                                     noDataValue=noDataValue)
 
-        # Convert color ramp to format the database can use
-        rampList = []
-
-        for index in range(len(colorRamp)):
-            rampIndex = len(colorRamp) - index - 1
-            valueForIndex = (rampIndex - intercept) / slope
-            rgb = colorRamp[rampIndex]
-            rampList.append('{0} {1} {2} {3} {4}'.format(valueForIndex, rgb[0], rgb[1], rgb[2], int(alpha * 255)))
-
-        # Add a line for the no-data values (nv)
-        rampList.append('nv 0 0 0 0')
+        mappedColorRamp = ColorRampGenerator.mapColorRampToValues(colorRamp=self._colorRamp,
+                                                                  minValue=minValue,
+                                                                  maxValue=maxValue,
+                                                                  alpha=alpha)
 
         # Join strings in list to create ramp
-        rampString = '\n'.join(rampList)
+        rampString = mappedColorRamp.getPostGisColorRampString()
 
 
         # Get a PNG representation of each raster
-        if cellSize is not None:
-            statement = '''
-                        SELECT ST_AsPNG(ST_Transform(ST_ColorMap(ST_Rescale({0}, {5}, '{6}'), 1, '{4}'), 4326, 'Bilinear')) As png
-                        FROM {1}
-                        WHERE {2} IN {3};
-                        '''.format(rasterFieldName,
-                                   tableName,
-                                   rasterIdFieldName,
-                                   rasterIdsString,
-                                   rampString,
-                                   cellSize,
-                                   resampleMethod)
-        else:
-            statement = '''
-                        SELECT ST_AsPNG(ST_Transform(ST_ColorMap({0}, 1, '{4}'), 4326, 'Bilinear')) As png
-                        FROM {1}
-                        WHERE {2} IN {3};
-                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterIdsString, rampString)
-
-        result = self._session.execute(statement)
+        result = self.getRastersAsPngs(session=self._session,
+                                       tableName=tableName,
+                                       rasterIds=rasterIds,
+                                       postGisRampString=rampString,
+                                       rasterField=rasterFieldName,
+                                       rasterIdField=rasterIdFieldName,
+                                       cellSize=cellSize,
+                                       resampleMethod=resampleMethod)
 
         binaryPNGs = []
 
@@ -803,14 +790,12 @@ class RasterConverter(object):
 
         # Append ramp to kml file for reference later
         extendedDataElement = ET.SubElement(document, 'ExtendedData')
-        for ramp in rampList:
+        for vrgba in mappedColorRamp.getAsVrgbaList():
             dataElement = ET.SubElement(extendedDataElement, 'Data', name='vrgba')
             dataValueElement = ET.SubElement(dataElement, 'value')
-            dataValueElement.text = ramp
+            dataValueElement.text = vrgba
 
         return ET.tostring(kml), binaryPNGs
-
-
         
     def getAsGrassAsciiRaster(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', newSRID=None):
         """
@@ -926,7 +911,7 @@ class RasterConverter(object):
         elif isinstance(sqlAlchemyEngineOrSession, Session):
             session = sqlAlchemyEngineOrSession        
         
-        # Execute statment
+        # Execute statement
         statement = 'SELECT * FROM st_gdaldrivers() ORDER BY short_name;'
         
         result = session.execute(statement)
@@ -943,172 +928,31 @@ class RasterConverter(object):
         Set the color ramp of the raster converter instance
         """
         if not colorRamp:
-            self._colorRamp = RasterConverter.setDefaultColorRamp(RasterConverter.COLOR_RAMP_HUE)
+            self._colorRamp = RasterConverter.setDefaultColorRamp(ColorRampEnum.COLOR_RAMP_HUE)
         else:
             self._colorRamp = colorRamp
               
-    def setDefaultColorRamp(self, ramp=COLOR_RAMP_HUE):
+    def setDefaultColorRamp(self, colorRampEnum=ColorRampEnum.COLOR_RAMP_HUE):
         """
         Returns the color ramp as a list of RGB tuples
         """
-        hue = [(255, 0, 255), (231, 0, 255), (208, 0, 255), (185, 0, 255), (162, 0, 255), (139, 0, 255), (115, 0, 255), (92, 0, 255), (69, 0, 255), (46, 0, 255), (23, 0, 255),        # magenta to blue
-                   (0, 0, 255), (0, 23, 255), (0, 46, 255), (0, 69, 255), (0, 92, 255), (0, 115, 255), (0, 139, 255), (0, 162, 255), (0, 185, 255), (0, 208, 255), (0, 231, 255),          # blue to cyan
-                   (0, 255, 255), (0, 255, 231), (0, 255, 208), (0, 255, 185), (0, 255, 162), (0, 255, 139), (0, 255, 115), (0, 255, 92), (0, 255, 69), (0, 255, 46), (0, 255, 23),        # cyan to green
-                   (0, 255, 0), (23, 255, 0), (46, 255, 0), (69, 255, 0), (92, 255, 0), (115, 255, 0), (139, 255, 0), (162, 255, 0), (185, 255, 0), (208, 255, 0), (231, 255, 0),          # green to yellow
-                   (255, 255, 0), (255, 243, 0), (255, 231, 0), (255, 220, 0), (255, 208, 0), (255, 197, 0), (255, 185, 0), (255, 174, 0), (255, 162, 0), (255, 151, 0), (255, 139, 0),    # yellow to orange
-                   (255, 128, 0), (255, 116, 0), (255, 104, 0), (255, 93, 0), (255, 81, 0), (255, 69, 0), (255, 58, 0), (255, 46, 0), (255, 34, 0), (255, 23, 0), (255, 11, 0),            # orange to red
-                   (255, 0, 0)]                                                                                                                                                            # red
-        
-        terrain = [(0, 100, 0), (19, 107, 0), (38, 114, 0), (57, 121, 0), (76, 129, 0), (95, 136, 0), (114, 143, 0), (133, 150, 0), (152, 158, 0), (171, 165, 0), (190, 172, 0),                   # dark green to golden rod yellow
-                   (210, 180, 0), (210, 167, 5), (210, 155, 10), (210, 142, 15), (210, 130, 20), (210, 117, 25),                                                                                   # golden rod yellow to orange brown
-                   (210, 105, 30), (188, 94, 25), (166, 83, 21), (145, 72, 17), (123, 61, 13), (101, 50, 9),                                                                                       # orange brown to dark brown
-                   (80, 40, 5), (95, 59, 27), (111, 79, 50), (127, 98, 73), (143, 118, 95), (159, 137, 118),(175, 157, 141), (191, 176, 164), (207, 196, 186), (223, 215, 209), (239, 235, 232),   # dark brown to white
-                   (255, 255, 255)]                                                                                                                                                                # white
-        
-        aqua = [(150, 255, 255), (136, 240, 250), (122, 226, 245), (109, 212, 240), (95, 198, 235), (81, 184, 230), (68, 170, 225), (54, 156, 220), (40, 142, 215), (27, 128, 210), (13, 114, 205), # aqua to blue
-                (0, 100, 200), (0, 94, 195), (0, 89, 191), (0, 83, 187), (0, 78, 182), (0, 72, 178), (0, 67, 174), (0, 61, 170), (0, 56, 165), (0, 50, 161), (0, 45, 157), (0, 40, 153),            # blue to navy blue
-                (0, 36, 143), (0, 32, 134), (0, 29, 125), (0, 25, 115), (0, 21, 106), (0, 18, 97), (0, 14, 88), (0, 10, 78), (0, 7, 69), (0, 3, 60), (0, 0, 51)]                                    # navy blue to dark navy blue
-        
-           
-        if (ramp == self.COLOR_RAMP_HUE):
-            self._colorRamp = hue
-        elif (ramp == self.COLOR_RAMP_TERRAIN):
-            self._colorRamp = terrain
-        elif (ramp == self.COLOR_RAMP_AQUA):
-            self._colorRamp = aqua
+        self._colorRamp = ColorRampGenerator.generateDefaultColorRamp(colorRampEnum)
 
     def setCustomColorRamp(self, colors=[], interpolatedPoints=10):
         """
         Accepts a list of RGB tuples and interpolates between them to create a custom color ramp.
         Returns the color ramp as a list of RGB tuples.
         """
-        if not (isinstance(colors, list)):
-            print 'COLOR RAMP GENERATOR WARNING: colors must be passed in as a list of RGB tuples.'
-            raise
-        
-        numColors = len(colors)
-        
-        colorRamp = []
-        
-        # Iterate over colors
-        for index in range (0, numColors - 1):
-            bottomColor = colors[index]
-            topColor = colors[index + 1]
-            
-            colorRamp.append(bottomColor)
-            
-            # Calculate slopes
-            rSlope = (topColor[0] - bottomColor[0]) / float(interpolatedPoints)
-            gSlope = (topColor[1] - bottomColor[1]) / float(interpolatedPoints)
-            bSlope = (topColor[2] - bottomColor[2]) / float(interpolatedPoints)
-            
-            # Interpolate colors
-            for point in range (1, interpolatedPoints):
-                red = int(rSlope * point + bottomColor[0])
-                green = int(gSlope * point + bottomColor[1])
-                blue = int(bSlope * point + bottomColor[2])
-                color = (red, green, blue)
-                
-                # Make sure the color ramp contains unique colors
-                if not (color in colorRamp):
-                    colorRamp.append(color)
-                
-        # Append the last color
-        colorRamp.append(colors[-1])
-                
-        self._colorRamp = colorRamp
+        self._colorRamp = ColorRampGenerator.generateCustomColorRamp(colors, interpolatedPoints)
 
-    def getColorRampInterpolationParameters(self, session, tableName, rasterId, rasterIdFieldName, rasterFieldName):
-        """
-        Creates color ramp based on min and max values of raster pixels. If pixel value is one of the no data values
-        it will be excluded in the color ramp interpolation. Returns colorRamp, slope, intercept
-
-        :param session: SQLAlchemy session object. Must be linked to a PostGIS enabled database
-        :param tableName: Name of the table to extract rasters from
-        :param rasterId: the raster id to perform the interpolation on
-        :param rasterIdFieldName: Name of the id field for rasters (usually the primary key field)
-        :param rasterFieldName: Name of the field where rasters are stored (of type raster)
-
-        :rtype : (colorRamp, float, float)
-        """
-        # Get min and max for raster band 1
-        statement = '''
-                SELECT {2}, (stats).min, (stats).max
-                FROM (
-                SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
-                FROM {1}
-                WHERE {2}={3}
-                ) As foo;
-                '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-        result = self._session.execute(statement)
-        
-        # extract the stats
-        for row in result:
-            minValue = math.trunc(row.min)
-            maxValue = math.ceil(row.max)
-        
-        # Set the no data value if min is -1 or 0
-        if (float(minValue) == RasterConverter.NO_DATA_VALUE_MAX) or (float(minValue) == RasterConverter.NO_DATA_VALUE_MIN):
-            statement = '''
-                    UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
-                    WHERE {2} = {3};
-                    '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, float(minValue))
-            session.execute(statement)
-            
-            # Pull the stats again with no data value set
-            statement = '''
-                SELECT {2}, (stats).min, (stats).max
-                FROM (
-                SELECT {2}, ST_SummaryStats({0}, 1, true) As stats
-                FROM {1}
-                WHERE {2}={3}
-                ) As foo;
-                '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
-            result = session.execute(statement)
-            
-            # extract the stats
-            for row in result:
-                minValue = row.min
-                maxValue = row.max
-        
-        # Map color ramp indicies to values
-        colorRamp = self._colorRamp
-        minRampIndex = 0.0 # Always zero
-        maxRampIndex = float(len(colorRamp) - 1) # Map color ramp indices to values using equation of a line
-        
-        # Resulting equation will be:
-        # rampIndex = slope * value + intercept
-        if minValue != maxValue:
-            slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
-            intercept = maxRampIndex - (slope * maxValue)
-        else:
-            slope = 0
-            intercept = minRampIndex
-        
-        # Return color ramp, slope, and intercept to interpolate by value
-        return colorRamp, slope, intercept
-
-    def getColorRampInterpolationParametersMultiple(self, session, tableName, rasterIds, rasterIdFieldName, rasterFieldName, noDataValue=0):
-        """
-        Creates color ramp based on min and max values of all the raster pixels from all rasters. If pixel value is one
-        of the no data values it will be excluded in the color ramp interpolation. Returns colorRamp, slope, intercept
-
-        :param session: SQLAlchemy session object. Must be linked to a PostGIS enabled database
-        :param tableName: Name of the table to extract rasters from
-        :param rasterIds: List of raster ids to create ramp for
-        :param rasterIdFieldName: Name of the id field for rasters (usually the primary key field)
-        :param rasterFieldName: Name of the field where rasters are stored (of type raster)
-
-        :rtype : (colorRamp, float, float)
-        """
+    def getMinMaxOfRasters(self, session, table, rasterIds, rasterField, rasterIdField, noDataValue):
         # Assemble rasters ids into string
         rasterIdsString = '({0})'.format(', '.join(rasterIds))
-
         for rasterId in rasterIds:
             statement = '''
                         UPDATE {1} SET {0} = ST_SetBandNoDataValue({0},1,{4})
                         WHERE {2} = {3};
-                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId, noDataValue)
+                        '''.format(rasterField, table, rasterIdField, rasterId, noDataValue)
 
             session.execute(statement)
 
@@ -1120,10 +964,8 @@ class RasterConverter(object):
                 FROM {1}
                 WHERE {2} IN {3}
                 ) As foo;
-                '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterIdsString)
-
-        result = self._session.execute(statement)
-
+                '''.format(rasterField, table, rasterIdField, rasterIdsString)
+        result = session.execute(statement)
         # extract the stats
         minValues = []
         maxValues = []
@@ -1138,28 +980,48 @@ class RasterConverter(object):
             minValue = min(minValues)
         except ValueError:
             minValue = 0
-
         try:
             maxValue = max(maxValues)
         except ValueError:
             maxValue = 1
 
-        # Map color ramp indicies to values
-        colorRamp = self._colorRamp
-        minRampIndex = 0.0 # Always zero
-        maxRampIndex = float(len(colorRamp) - 1) # Map color ramp indices to values using equation of a line
+        return minValue, maxValue
 
-        # Resulting equation will be:
-        # rampIndex = slope * value + intercept
-        if minValue != maxValue:
-            slope = (maxRampIndex - minRampIndex) / (maxValue - minValue)
-            intercept = maxRampIndex - (slope * maxValue)
+    def getRastersAsPngs(self, session, tableName, rasterIds, postGisRampString, rasterField='raster', rasterIdField='id',  cellSize=None, resampleMethod='NearestNeighbour'):
+        """
+        Return the raster in a PNG format
+        """
+        # Validate
+        VALID_RESAMPLE_METHODS = ('NearestNeighbour', 'Bilinear', 'Cubic', 'CubicSpline', 'Lanczos')
+
+        # Validate
+        if resampleMethod not in VALID_RESAMPLE_METHODS:
+            print 'RASTER CONVERSION ERROR: {0} is not a valid resampleMethod. Please use either {1}'.\
+                format(resampleMethod, ', '.join(VALID_RESAMPLE_METHODS))
+
+        if cellSize is not None:
+            if not self.isNumber(cellSize):
+                print 'RASTER CONVERSION ERROR: cellSize must be a number or None.'
+                raise
+
+        # Convert raster ids into formatted string
+        rasterIdsString = '({0})'.format(', '.join(rasterIds))
+
+        if cellSize is not None:
+            statement = '''
+                        SELECT ST_AsPNG(ST_Transform(ST_ColorMap(ST_Rescale({0}, {5}, '{6}'), 1, '{4}'), 4326, 'Bilinear')) As png
+                        FROM {1}
+                        WHERE {2} IN {3};
+                        '''.format(rasterField, tableName, rasterIdField, rasterIdsString, postGisRampString, cellSize,
+                                   resampleMethod)
         else:
-            slope = 0
-            intercept = minRampIndex
-
-        # Return color ramp, slope, and intercept to interpolate by value
-        return colorRamp, slope, intercept
+            statement = '''
+                        SELECT ST_AsPNG(ST_Transform(ST_ColorMap({0}, 1, '{4}'), 4326, 'Bilinear')) As png
+                        FROM {1}
+                        WHERE {2} IN {3};
+                        '''.format(rasterField, tableName, rasterIdField, rasterIdsString, postGisRampString)
+        result = session.execute(statement)
+        return result
 
     def isNumber(self, value):
         """
