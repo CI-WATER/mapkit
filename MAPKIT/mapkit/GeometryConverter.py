@@ -33,14 +33,13 @@ class GeometryConverter(object):
         elif isinstance(sqlAlchemyEngineOrSession, Session):
             self._session = sqlAlchemyEngineOrSession
 
-    def getPointAsKmlCircle(self, tableName, radius, steps=25, extrude=0, zScaleFactor=1.0, geometryId=1,
+    def getPointAsKmlCircle(self, tableName, radius, slices=25, extrude=0, zScaleFactor=1.0, geometryId=1,
                             geometryIdFieldName='id', geometryFieldName='geometry'):
         """
         Return a string representing a circular polygon in KML format with center at the coordinates of the point
         and radius as specified.
         """
         # Validate
-
 
         # Circle Params
         PI2 = 2 * math.pi
@@ -64,9 +63,9 @@ class GeometryConverter(object):
         # Create circle coordinates
         coordinatesString = ''
 
-        for i in range(steps):
-            latitude = centerLatitude + (radius * math.cos(float(i) / float(steps) * PI2))
-            longitude = centerLongitude + (radius * math.sin(float(i) / float(steps) * PI2))
+        for i in range(slices):
+            latitude = centerLatitude + (radius * math.cos(float(i) / float(slices) * PI2))
+            longitude = centerLongitude + (radius * math.sin(float(i) / float(slices) * PI2))
             elevation = 0.0
 
             if extrude and zScaleFactor:

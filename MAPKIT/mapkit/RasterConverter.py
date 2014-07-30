@@ -804,7 +804,7 @@ class RasterConverter(object):
         arcInfoGrid = str(self.getAsGdalRaster(rasterFieldName, tableName, rasterIdFieldName, rasterId, 'AAIGrid', newSRID)).splitlines()
         
         ## Convert arcInfoGrid to GRASS ASCII format ##
-        # Get values from heaser which look something this:
+        # Get values from header which look something this:
         # ncols        67
         # nrows        55
         # xllcorner    425802.32143212341
