@@ -111,6 +111,74 @@ class RasterLoader(object):
         return wellKnownBinary
 
     @classmethod
+    def grassAsciiRasterToWKB(cls, session, grassRasterPath, srid, noData=0):
+        """
+        Load GRASS ASCII rasters directly using the makeSingleBandWKBRaster method. Do this to eliminate the raster2pgsql
+        dependency.
+        """
+        # Constants
+        NUM_HEADER_LINES = 6
+
+        # Defaults
+        north = 0.0
+        east = 0.0
+        west = 0.0
+        rows = 0
+        columns = 0
+
+        if grassRasterPath is not None:
+            # If the path to the file is given, open the file and extract contents.
+            with open(grassRasterPath, 'r') as f:
+                rasterLines = f.readlines()
+        else:
+            print "RASTER LOAD ERROR: Must provide the path the raster."
+            raise
+
+        # Extract the headers from the file and derive metadata
+        for line in rasterLines[0:NUM_HEADER_LINES]:
+            spline = line.split()
+
+            if 'north' in spline[0].lower():
+                north = float(spline[1])
+            elif 'east' in spline[0].lower():
+                east = float(spline[1])
+            elif 'west' in spline[0].lower():
+                west = float(spline[1])
+            elif 'rows' in spline[0].lower():
+                rows = int(spline[1])
+            elif 'cols' in spline[0].lower():
+                columns = int(spline[1])
+
+        # Define raster metadata from headers
+        width = columns
+        height = rows
+        upperLeftX = west
+        upperLeftY = north
+        cellSizeX = int(abs(west - east) / columns)
+        cellSizeY = -1 * cellSizeX
+
+        # Assemble the data array string
+        dataArrayList = []
+
+        for line in rasterLines[NUM_HEADER_LINES:len(rasterLines)]:
+            dataArrayList.append('[{0}]'.format(', '.join(line.split())))
+
+        dataArrayString = '[{0}]'.format(', '.join(dataArrayList))
+
+        # Create well known binary raster
+        wellKnownBinary = cls.makeSingleBandWKBRaster(session=session,
+                                                      width=width, height=height,
+                                                      upperLeftX=upperLeftX, upperLeftY=upperLeftY,
+                                                      cellSizeX=cellSizeX, cellSizeY=cellSizeY,
+                                                      skewX=0, skewY=0,
+                                                      srid=srid,
+                                                      dataArray=dataArrayString,
+                                                      noDataValue=noData)
+
+        return wellKnownBinary
+
+
+    @classmethod
     def makeSingleBandWKBRaster(cls, session, width, height, upperLeftX, upperLeftY, cellSizeX, cellSizeY, skewX, skewY, srid, dataArray, initialValue=None, noDataValue=None):
         """
         Generate Well Known Binary via SQL. Must be used on a PostGIS database as it relies on several PostGIS

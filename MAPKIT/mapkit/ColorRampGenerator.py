@@ -39,10 +39,15 @@ class MappedColorRamp(object):
 
         self.vrgbaList = []
 
-        for index in range(len(self.colorRamp)):
-            rampIndex = len(self.colorRamp) - index - 1
-            valueForIndex = (rampIndex - self.intercept) / self.slope
-            rgb = self.colorRamp[rampIndex]
+        if self.min != self.max:
+            for index in range(len(self.colorRamp)):
+                rampIndex = len(self.colorRamp) - index - 1
+                valueForIndex = (rampIndex - self.intercept) / self.slope
+                rgb = self.colorRamp[rampIndex]
+                self.vrgbaList.append('{0} {1} {2} {3} {4}'.format(valueForIndex, rgb[0], rgb[1], rgb[2], int(alpha * 255)))
+        else:
+            valueForIndex = self.max
+            rgb = self.colorRamp[0]
             self.vrgbaList.append('{0} {1} {2} {3} {4}'.format(valueForIndex, rgb[0], rgb[1], rgb[2], int(alpha * 255)))
 
         # Add a line for the no-data values (nv)
@@ -208,7 +213,7 @@ class ColorRampGenerator(object):
 
         :rtype : MappedColorRamp
         """
-        minRampIndex = 0.0  # Always zero
+        minRampIndex = 0  # Always zero
         maxRampIndex = float(len(colorRamp) - 1)  # Map color ramp indices to values using equation of a line
 
         # Resulting equation will be:
