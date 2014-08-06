@@ -3,7 +3,8 @@ import os
 from setuptools import setup, find_packages
 
 requires = [
-    'sqlalchemy>=0.7'
+    'sqlalchemy>=0.7',
+    'requests'
     ]
 
 setup(name='mapkit',

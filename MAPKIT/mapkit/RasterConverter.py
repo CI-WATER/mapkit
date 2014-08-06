@@ -10,6 +10,7 @@
 
 import math
 import xml.etree.ElementTree as ET
+from datetime import timedelta
 
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import Engine
@@ -460,10 +461,17 @@ class RasterConverter(object):
                                                                   maxValue=maxValue,
                                                                   alpha=alpha)
 
-        # Calculate delta time between images
+
+
+        # Default to time delta to None
+        deltaTime = None
+
+        # Calculate delta time between images if more than one
         time1 = timeStampedRasters[0]['dateTime']
-        time2 = timeStampedRasters[1]['dateTime']
-        deltaTime = time2 - time1
+
+        if len(timeStampedRasters) >= 2:
+            time2 = timeStampedRasters[1]['dateTime']
+            deltaTime = time2 - time1
 
         # Initialize KML Document
         kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
@@ -483,8 +491,10 @@ class RasterConverter(object):
         for timeStampedRaster in timeStampedRasters:
             # Extract variables
             rasterId = timeStampedRaster['rasterId']
-            dateTime = timeStampedRaster['dateTime']
-            prevDateTime = dateTime - deltaTime
+
+            if deltaTime:
+                dateTime = timeStampedRaster['dateTime']
+                prevDateTime = dateTime - deltaTime
 
             # Get polygons for each cell in kml format
             statement = '''
@@ -550,14 +560,15 @@ class RasterConverter(object):
                         # Set the polygon fill alpha and color
                         polyColor.text = hexABGR
 
-                        # Create TimeSpan tag
-                        timeSpan = ET.SubElement(placemark, 'TimeSpan')
+                        if deltaTime:
+                            # Create TimeSpan tag
+                            timeSpan = ET.SubElement(placemark, 'TimeSpan')
 
-                        # Create begin and end tags
-                        begin = ET.SubElement(timeSpan, 'begin')
-                        begin.text = prevDateTime.strftime('%Y-%m-%dT%H:%M:%S')
-                        end = ET.SubElement(timeSpan, 'end')
-                        end.text = dateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                            # Create begin and end tags
+                            begin = ET.SubElement(timeSpan, 'begin')
+                            begin.text = prevDateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                            end = ET.SubElement(timeSpan, 'end')
+                            end.text = dateTime.strftime('%Y-%m-%dT%H:%M:%S')
 
                         # Create multigeometry tag
                         multigeometry = ET.SubElement(placemark, 'MultiGeometry')
@@ -578,9 +589,10 @@ class RasterConverter(object):
                         valueJ = ET.SubElement(jData, 'value')
                         valueJ.text = str(j)
 
-                        tData = ET.SubElement(extendedData, 'Data', name='t')
-                        valueT = ET.SubElement(tData, 'value')
-                        valueT.text = dateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                        if deltaTime:
+                            tData = ET.SubElement(extendedData, 'Data', name='t')
+                            valueT = ET.SubElement(tData, 'value')
+                            valueT.text = dateTime.strftime('%Y-%m-%dT%H:%M:%S')
 
                         groupValue = value
 
@@ -708,10 +720,15 @@ class RasterConverter(object):
         east = upperLeftX + (scaleX * width)
         west = upperLeftX
 
-        # Calculate delta time between images
+        # Default to time delta to None
+        deltaTime = None
+
+        # Calculate delta time between images if more than one
         time1 = timeStampedRasters[0]['dateTime']
-        time2 = timeStampedRasters[1]['dateTime']
-        deltaTime = time2 - time1
+
+        if len(timeStampedRasters) >= 2:
+            time2 = timeStampedRasters[1]['dateTime']
+            deltaTime = time2 - time1
 
         # Initialize KML Document
         kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
@@ -729,8 +746,9 @@ class RasterConverter(object):
 
         for index, timeStampedRaster in enumerate(timeStampedRasters):
             # Extract variable
-            dateTime = timeStampedRaster['dateTime']
-            prevDateTime = dateTime - deltaTime
+            if deltaTime:
+                dateTime = timeStampedRaster['dateTime']
+                prevDateTime = dateTime - deltaTime
 
 
             # GroundOverlay
@@ -738,14 +756,15 @@ class RasterConverter(object):
             overlayName = ET.SubElement(groundOverlay, 'name')
             overlayName.text = 'Overlay'
 
-            # Create TimeSpan tag
-            timeSpan = ET.SubElement(groundOverlay, 'TimeSpan')
+            if deltaTime:
+                # Create TimeSpan tag
+                timeSpan = ET.SubElement(groundOverlay, 'TimeSpan')
 
-            # Create begin tag
-            begin = ET.SubElement(timeSpan, 'begin')
-            begin.text = prevDateTime.strftime('%Y-%m-%dT%H:%M:%S')
-            end = ET.SubElement(timeSpan, 'end')
-            end.text = dateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                # Create begin tag
+                begin = ET.SubElement(timeSpan, 'begin')
+                begin.text = prevDateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                end = ET.SubElement(timeSpan, 'end')
+                end.text = dateTime.strftime('%Y-%m-%dT%H:%M:%S')
 
             # DrawOrder
             drawOrderElement = ET.SubElement(groundOverlay, 'drawOrder')
