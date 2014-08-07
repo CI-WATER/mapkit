@@ -49,7 +49,7 @@ class RasterConverter(object):
         else:
             self._colorRamp = colorRamp
 
-    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', documentName='default', alpha=1.0, noDataValue=0):
+    def getAsKmlGrid(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', documentName='default', alpha=1.0, noDataValue=0, discreet=False):
         """
         Creates a KML file with each cell in the raster represented by a polygon. The result is a vector grid representation of the raster.
         Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
@@ -92,11 +92,12 @@ class RasterConverter(object):
         docName.text = documentName
         
         groupValue = -9999999.0
+        uniqueValues = []
         
         # Add polygons to the kml file with styling
         for row in result:
             # Value will be None if it is a no data value
-            if (row.val):
+            if row.val:
                 value = float(row.val)
             else:
                 value = None
@@ -106,9 +107,13 @@ class RasterConverter(object):
             j = int(row.y)
             
             # Only create placemarks for values that are no data values
-            if (value):
+            if value:
+                # Collect unique values
+                if value not in uniqueValues:
+                    uniqueValues.append(value)
+
                 # Create a new placemark for each group of values
-                if (value != groupValue):
+                if value != groupValue:
                     placemark = ET.SubElement(document, 'Placemark')
                     placemarkName = ET.SubElement(placemark, 'name')
                     placemarkName.text = str(value)
@@ -165,11 +170,19 @@ class RasterConverter(object):
                 
                 # Get polygon object from kml string and append to the current multigeometry group
                 polygon = ET.fromstring(polygonString)
-                multigeometry.append(polygon)                    
+                multigeometry.append(polygon)
+
+        if not discreet:
+            # Embed the color ramp in SLD format
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsContinuousSLD()))
+        else:
+            # Sort the unique values
+            uniqueValues.sort()
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsDiscreetSLD(uniqueValues)))
         
         return ET.tostring(kml)
     
-    def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', documentName='default', alpha=1.0,  noDataValue=0):
+    def getAsKmlClusters(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', documentName='default', alpha=1.0,  noDataValue=0, discreet=False):
         """
         Creates a KML file where adjacent cells with the same value are clustered together into a polygons. The result is a vector representation
         of each cluster. Note that pixels with values between -1 and 0 are omitted as no data values. Also note that this method only works on the first band.
@@ -212,20 +225,25 @@ class RasterConverter(object):
         docName.text = documentName
         
         groupValue = -9999999.0
+        uniqueValues = []
         
         # Add polygons to the kml file with styling
         for row in result:
             # Value will be None if it is a no data value
-            if (row.val):
+            if row.val:
                 value = float(row.val)
             else:
                 value = None
             
             polygonString = row.polygon
             
-            if (value):
+            if value:
+                # Collect unique values
+                if value not in uniqueValues:
+                    uniqueValues.append(value)
+
                 # Create a new placemark for each group of values
-                if (value != groupValue):
+                if value != groupValue:
                     placemark = ET.SubElement(document, 'Placemark')
                     placemarkName = ET.SubElement(placemark, 'name')
                     placemarkName.text = str(value)
@@ -276,13 +294,21 @@ class RasterConverter(object):
                 # Get polygon object from kml string and append to the current multigeometry group
                 polygon = ET.fromstring(polygonString)
                 multigeometry.append(polygon)
+
+        if not discreet:
+            # Embed the color ramp in SLD format
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsContinuousSLD()))
+        else:
+            # Sort the unique values
+            uniqueValues.sort()
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsDiscreetSLD(uniqueValues)))
                 
         return ET.tostring(kml)
     
     def getAsKmlPng(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', documentName='default',
-                    alpha=1.0,  drawOrder=0, noDataValue=0, cellSize=None, resampleMethod='NearestNeighbour'):
+                    alpha=1.0,  drawOrder=0, noDataValue=0, cellSize=None, resampleMethod='NearestNeighbour', discreet=False):
         """
-        Creates a KML wrapper and PNG representat of the raster. Returns a string of the kml file contents and
+        Creates a KML wrapper and PNG represent of the raster. Returns a string of the kml file contents and
         a binary string of the PNG contents. The color ramp used to generate the PNG is embedded in the ExtendedData
         tag of the GroundOverlay.
         IMPORTANT: The PNG image is referenced in the kml as 'raster.png', thus it must be written to file with that
@@ -349,6 +375,7 @@ class RasterConverter(object):
         document = ET.SubElement(kml, 'Document')
         docName = ET.SubElement(document, 'name')
         docName.text = documentName
+
         
         # GroundOverlay
         groundOverlay = ET.SubElement(document, 'GroundOverlay')
@@ -396,17 +423,35 @@ class RasterConverter(object):
         westElement = ET.SubElement(latLonBox, 'west')
         westElement.text = str(west)
 
-        # Append ramp to kml file for reference later
-        extendedDataElement = ET.SubElement(groundOverlay, 'ExtendedData')
-        for vrgba in mappedColorRamp.getAsVrgbaList():
-            dataElement = ET.SubElement(extendedDataElement, 'Data', name='vrgba')
-            dataValueElement = ET.SubElement(dataElement, 'value')
-            dataValueElement.text = vrgba
-        
+        if not discreet:
+            # Embed the color ramp in SLD format
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsContinuousSLD()))
+        else:
+            # Determine values for discreet color ramp
+            statement = '''
+                        SELECT (pvc).*
+                        FROM (
+                              SELECT ST_ValueCount({0}) as pvc
+                              FROM {1}
+                              WHERE {2}={3}
+                             ) As foo
+                        ORDER BY (pvc).value;
+                        '''.format(rasterFieldName, tableName, rasterIdFieldName, rasterId)
+
+            result = self._session.execute(statement)
+
+            values = []
+            for row in result:
+                values.append(row.value)
+
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsDiscreetSLD(values)))
+
         return ET.tostring(kml), binaryPNG
+
+
        
     def getAsKmlGridAnimation(self, tableName, timeStampedRasters=[], rasterIdFieldName='id', rasterFieldName='raster',
-                              documentName='default', alpha=1.0,  noDataValue=0):
+                              documentName='default', alpha=1.0,  noDataValue=0, discreet=False):
         """
         Return a sequence of rasters with timestamps as a kml with time markers for animation.
 
@@ -479,6 +524,13 @@ class RasterConverter(object):
         docName = ET.SubElement(document, 'name')
         docName.text = documentName
 
+        if not discreet:
+            # Embed the color ramp in SLD format
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsContinuousSLD()))
+        else:
+            values = []
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsDiscreetSLD(values)))
+
         # Apply special style to hide legend items
         style = ET.SubElement(document, 'Style', id='check-hide-children')
         listStyle = ET.SubElement(style, 'ListStyle')
@@ -486,6 +538,9 @@ class RasterConverter(object):
         listItemType.text = 'checkHideChildren'
         styleUrl = ET.SubElement(document, 'styleUrl')
         styleUrl.text = '#check-hide-children'
+
+        # Collect unique values
+        uniqueValues = []
 
         # Retrieve the rasters and styles
         for timeStampedRaster in timeStampedRasters:
@@ -525,6 +580,9 @@ class RasterConverter(object):
 
                 # Only create placemarks for values that are not no data values
                 if value:
+                    if value not in uniqueValues:
+                        uniqueValues.append(value)
+
                     # Create a new placemark for each group of values
                     if value != groupValue:
                         placemark = ET.SubElement(document, 'Placemark')
@@ -600,13 +658,21 @@ class RasterConverter(object):
                     polygon = ET.fromstring(polygonString)
                     multigeometry.append(polygon)
 
+        if not discreet:
+            # Embed the color ramp in SLD format
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsContinuousSLD()))
+        else:
+            # Sort the unique values
+            uniqueValues.sort()
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsDiscreetSLD(uniqueValues)))
+
         return ET.tostring(kml)
 
 
 
     def getAsKmlPngAnimation(self, tableName, timeStampedRasters=[], rasterIdFieldName='id', rasterFieldName='raster',
                              documentName='default', noDataValue=0, alpha=1.0, drawOrder=0, cellSize=None,
-                             resampleMethod='NearestNeighbour'):
+                             resampleMethod='NearestNeighbour', discreet=False):
         """
         Return a sequence of rasters with timestamps as a kml with time markers for animation.
 
@@ -736,6 +802,13 @@ class RasterConverter(object):
         docName = ET.SubElement(document, 'name')
         docName.text = documentName
 
+        if not discreet:
+            # Embed the color ramp in SLD format
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsContinuousSLD()))
+        else:
+            values = []
+            document.append(ET.fromstring(mappedColorRamp.getColorMapAsDiscreetSLD(values)))
+
         # Apply special style to hide legend items
         style = ET.SubElement(document, 'Style', id='check-hide-children')
         listStyle = ET.SubElement(style, 'ListStyle')
@@ -805,13 +878,6 @@ class RasterConverter(object):
 
             westElement = ET.SubElement(latLonBox, 'west')
             westElement.text = str(west)
-
-        # Append ramp to kml file for reference later
-        extendedDataElement = ET.SubElement(document, 'ExtendedData')
-        for vrgba in mappedColorRamp.getAsVrgbaList():
-            dataElement = ET.SubElement(extendedDataElement, 'Data', name='vrgba')
-            dataValueElement = ET.SubElement(dataElement, 'value')
-            dataValueElement.text = vrgba
 
         return ET.tostring(kml), binaryPNGs
         
