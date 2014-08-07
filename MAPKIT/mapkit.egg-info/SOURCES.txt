@@ -1,5 +1,7 @@
 README.txt
 setup.py
+mapkit/ColorRampGenerator.py
+mapkit/GeometryConverter.py
 mapkit/MapKitRaster.py
 mapkit/RasterConverter.py
 mapkit/RasterLoader.py
