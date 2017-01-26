@@ -28,7 +28,7 @@ or
 
 Clone the source at:
 
-git clone https://github.com/CI-WATER/mapkit/tree/master.git
+git clone https://github.com/CI-WATER/mapkit.git
 
 and run:
 
