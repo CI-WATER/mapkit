@@ -1,5 +1,5 @@
 ***********************************************
-* MapKit 0.0.3
+* MapKit 1.2.0
 * Author: Nathan Swain
 * Copyright: (c) Brigham Young University 2013
 * License: BSD 2-Clause
@@ -28,7 +28,7 @@ or
 
 Clone the source at:
 
-git clone git@bitbucket.org:swainn/mapkit.git
+git clone https://github.com/CI-WATER/mapkit/tree/master.git
 
 and run:
 
