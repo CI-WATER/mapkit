@@ -3,11 +3,12 @@
 * Copyright: (c) Brigham Young University 2013
 * License: BSD 2-Clause
 
+[![PyPI version](https://badge.fury.io/py/mapkit.svg)](https://badge.fury.io/py/mapkit)
+
 # INTRODUCTION
 
 MapKit is a Python module with mapping functions for PostGIS enabled PostgreSQL databases.
 
-[![PyPI version](https://badge.fury.io/py/RAPIDpy.svg)](https://badge.fury.io/py/RAPIDpy)
 
 # DEPENDENCIES
 
