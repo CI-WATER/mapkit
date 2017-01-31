@@ -18,21 +18,29 @@ MapKit is a Python module with mapping functions for PostGIS enabled PostgreSQL 
 To load rasters into the database, you will need raster2pgsql executable that comes with a PostGIS installation
 
 # INSTALLATION
+
+If you are using Anaconda (https://www.continuum.io/why-anaconda):
+
 ```
-easy_install mapkit
+$ conda install -c conda-forge mapkit
 ```
-or 
+
+Otherwise, you can install through the regular Python methods:
 ```
-pip install mapkit
+$ easy_install mapkit
 ```
-or 
+or
+```
+$ pip install mapkit
+```
+# DEVELOPER INSTALLATION
 
 Clone the source at:
 ```
-git clone https://github.com/CI-WATER/mapkit.git
+$ git clone https://github.com/CI-WATER/mapkit.git
 ```
 and run:
 
 ```
-python setup.py install
+$ python setup.py install
 ```
