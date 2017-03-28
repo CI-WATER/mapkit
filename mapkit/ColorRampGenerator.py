@@ -112,55 +112,52 @@ class MappedColorRamp(object):
         """
         return self.vrgbaList
 
-    def getColorMapAsContinuousSLD(self):
+    def getColorMapAsContinuousSLD(self, nodata=-9999):
         """
         Return the mapped color ramp as a
         :rtype: str
         """
         colorMap = ET.Element('ColorMap', type='interval')
 
-        if self.min != self.max and self.slope > 0:
-            for index in range(len(self.colorRamp)):
-                rampIndex = len(self.colorRamp) - index - 1
-                valueForIndex = (rampIndex - self.intercept) / self.slope
-                rgb = self.colorRamp[rampIndex]
-                hexRGB = '#%02X%02X%02X' % (rgb[0],
-                                            rgb[1],
-                                            rgb[2])
+        # Add a line for the no-data values (nv)
+        ET.SubElement(colorMap, 'ColorMapEntry', color='#000000', quantity=str(nodata), label='NoData', opacity='0.0')
 
-                ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(valueForIndex), label=str(index), opacity=str(self.alpha))
+        if self.min != self.max and self.slope > 0:
+            for rampIndex in range(len(self.colorRamp)):
+                valueForIndex = (rampIndex - self.intercept) / self.slope
+                red, green, blue = self.colorRamp[rampIndex]
+                hexRGB = '#%02X%02X%02X' % (red,
+                                            green,
+                                            blue)
+
+                ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(valueForIndex), label=str(valueForIndex), opacity=str(self.alpha))
         else:
             valueForIndex = self.max
-            rgb = self.colorRamp[0]
-            hexRGB = '#%02X%02X%02X' % (rgb[0],
-                                        rgb[1],
-                                        rgb[2])
-            ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(valueForIndex), label=str(1), opacity=str(self.alpha))
+            red, green, blue = self.colorRamp[0]
+            hexRGB = '#%02X%02X%02X' % (red,
+                                        green,
+                                        blue)
+            ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(valueForIndex), label=str(valueForIndex), opacity=str(self.alpha))
 
-        # Add a line for the no-data values (nv)
-        ET.SubElement(colorMap, 'ColorMapEntry', color='#000000', quantity=str('nv'), label='NoData', opacity='0.0')
 
         return ET.tostring(colorMap)
 
-    def getColorMapAsDiscreetSLD(self, uniqueValues):
+    def getColorMapAsDiscreetSLD(self, uniqueValues, nodata=-9999):
         """
         Create the color map SLD format from a list of values.
         :rtype: str
         """
         colorMap = ET.Element('ColorMap', type='values')
-        labelCounter = 0
+        # Add a line for the no-data values (nv)
+        ET.SubElement(colorMap, 'ColorMapEntry', color='#000000', quantity=str(nodata), label='NoData', opacity='0.0')
 
-        for value in uniqueValues:
-            rgb = self.getColorForValue(value)
-            hexRGB = '#%02X%02X%02X' % (rgb[0],
-                                        rgb[1],
-                                        rgb[2])
-            labelCounter += 1
+        for labelCounter, value in enumerate(uniqueValues):
+            red, green, blue = self.getColorForValue(value)
+            hexRGB = '#%02X%02X%02X' % (red,
+                                        green,
+                                        blue)
 
             ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(value), label=str(labelCounter), opacity=str(self.alpha))
-
-        # Add a line for the no-data values (nv)
-        ET.SubElement(colorMap, 'ColorMapEntry', color='#000000', quantity=str('nv'), label='NoData', opacity='0.0')
 
         return ET.tostring(colorMap)
 
