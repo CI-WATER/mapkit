@@ -130,7 +130,8 @@ class MappedColorRamp(object):
                                             green,
                                             blue)
 
-                ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(valueForIndex), label=str(valueForIndex), opacity=str(self.alpha))
+                ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(valueForIndex),
+                              label="{label:.0f}".format(label=valueForIndex), opacity=str(self.alpha))
         else:
             valueForIndex = self.max
             red, green, blue = self.colorRamp[0]
@@ -151,13 +152,13 @@ class MappedColorRamp(object):
         # Add a line for the no-data values (nv)
         ET.SubElement(colorMap, 'ColorMapEntry', color='#000000', quantity=str(nodata), label='NoData', opacity='0.0')
 
-        for labelCounter, value in enumerate(uniqueValues):
+        for value in uniqueValues:
             red, green, blue = self.getColorForValue(value)
             hexRGB = '#%02X%02X%02X' % (red,
                                         green,
                                         blue)
 
-            ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(value), label=str(labelCounter), opacity=str(self.alpha))
+            ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(value), label=str(value), opacity=str(self.alpha))
 
         return ET.tostring(colorMap)
 
