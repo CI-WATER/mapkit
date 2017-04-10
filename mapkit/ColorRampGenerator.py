@@ -122,6 +122,16 @@ class MappedColorRamp(object):
         # Add a line for the no-data values (nv)
         ET.SubElement(colorMap, 'ColorMapEntry', color='#000000', quantity=str(nodata), label='NoData', opacity='0.0')
 
+        def get_label_formatter(value):
+            label_tag="{label:.0f}"
+            if abs(value) < 0.01 and value != 0:
+                label_tag = "{label:.2E}"
+            elif abs(value) < 10:
+                label_tag="{label:.2f}"
+            elif abs(value) < 99:
+                label_tag="{label:.1f}"
+            return label_tag
+
         if self.min != self.max and self.slope > 0:
             for rampIndex in range(len(self.colorRamp)):
                 valueForIndex = (rampIndex - self.intercept) / self.slope
@@ -130,15 +140,22 @@ class MappedColorRamp(object):
                                             green,
                                             blue)
 
-                ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(valueForIndex),
-                              label="{label:.0f}".format(label=valueForIndex), opacity=str(self.alpha))
+                label_tag = get_label_formatter(valueForIndex)
+                ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB,
+                              quantity=str(valueForIndex),
+                              label=label_tag.format(label=valueForIndex),
+                              opacity=str(self.alpha))
         else:
             valueForIndex = self.max
             red, green, blue = self.colorRamp[0]
             hexRGB = '#%02X%02X%02X' % (red,
                                         green,
                                         blue)
-            ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB, quantity=str(valueForIndex), label=str(valueForIndex), opacity=str(self.alpha))
+            label_tag = get_label_formatter(valueForIndex)
+            ET.SubElement(colorMap, 'ColorMapEntry', color=hexRGB,
+                          quantity=str(valueForIndex),
+                          label=label_tag.format(label=valueForIndex),
+                          opacity=str(self.alpha))
 
 
         return ET.tostring(colorMap)
