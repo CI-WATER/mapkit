@@ -14,10 +14,10 @@ from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
-
 def version():
-    return '1.1.0'
+    return '1.2.2'
 
+__version__ = version()
 
 def lookupSpatialReferenceID(wellKnownText):
     """
