@@ -6,7 +6,7 @@ requires = [
     ]
 
 setup(name='mapkit',
-      version='1.2.1',
+      version='1.2.2',
       description='Mapping tools for PostGIS-enabled PostgreSQL databases.',
       long_description='',
       author='Nathan Swain',
