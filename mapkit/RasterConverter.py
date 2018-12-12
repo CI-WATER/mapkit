@@ -7,10 +7,7 @@
 * License: BSD 2-Clause
 ********************************************************************************
 """
-
-import math
 import xml.etree.ElementTree as ET
-from datetime import timedelta
 
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import Engine
@@ -57,8 +54,7 @@ class RasterConverter(object):
         """
         # Validate alpha
         if not (alpha >= 0 and alpha <= 1.0):
-            print("RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0.")
-            raise
+            raise ValueError("RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0.")
 
         # Get the color ramp and parameters
         minValue, maxValue = self.getMinMaxOfRasters(session=self._session,
@@ -190,8 +186,7 @@ class RasterConverter(object):
         """
 
         if not (alpha >= 0 and alpha <= 1.0):
-            print("RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0.")
-            raise
+            raise ValueError("RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0.")
 
         # Get the color ramp and parameters
         minValue, maxValue = self.getMinMaxOfRasters(session=self._session,
@@ -476,19 +471,16 @@ class RasterConverter(object):
 
         # Validate alpha
         if not (alpha >= 0 and alpha <= 1.0):
-            print("RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0.")
-            raise
+            raise ValueError("RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0.")
 
         rasterIds = []
 
         for timeStampedRaster in timeStampedRasters:
             # Validate dictionary
             if 'rasterId' not in timeStampedRaster:
-                print('RASTER CONVERSION ERROR: rasterId must be provided for each raster.')
-                raise
+                raise ValueError('RASTER CONVERSION ERROR: rasterId must be provided for each raster.')
             elif 'dateTime' not in timeStampedRaster:
-                print('RASTER CONVERSION ERROR: dateTime must be provided for each raster.')
-                raise
+                raise ValueError('RASTER CONVERSION ERROR: dateTime must be provided for each raster.')
 
             rasterIds.append(str(timeStampedRaster['rasterId']))
 
@@ -702,16 +694,13 @@ class RasterConverter(object):
 
 
         if not self.isNumber(noDataValue):
-            print('RASTER CONVERSION ERROR: noDataValue must be a number.')
-            raise
+            raise ValueError('RASTER CONVERSION ERROR: noDataValue must be a number.')
 
         if not self.isNumber(drawOrder):
-            print('RASTER CONVERSION ERROR: drawOrder must be a number.')
-            raise
+            raise ValueError('RASTER CONVERSION ERROR: drawOrder must be a number.')
 
         if not (alpha >= 0 and alpha <= 1.0):
-            print("RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0.")
-            raise
+            raise ValueError("RASTER CONVERSION ERROR: alpha must be between 0.0 and 1.0.")
 
 
         # Extract raster Ids and validate
@@ -720,11 +709,9 @@ class RasterConverter(object):
         for timeStampedRaster in timeStampedRasters:
             # Validate dictionary
             if 'rasterId' not in timeStampedRaster:
-                print('RASTER CONVERSION ERROR: rasterId must be provided for each raster.')
-                raise
+                raise ValueError('RASTER CONVERSION ERROR: rasterId must be provided for each raster.')
             elif 'dateTime' not in timeStampedRaster:
-                print('RASTER CONVERSION ERROR: dateTime must be provided for each raster.')
-                raise
+                raise ValueError('RASTER CONVERSION ERROR: dateTime must be provided for each raster.')
 
             rasterIds.append(str(timeStampedRaster['rasterId']))
 
@@ -886,7 +873,7 @@ class RasterConverter(object):
         Returns a string representation of the raster in GRASS ASCII raster format.
         """
         # Get raster in ArcInfo Grid format
-        arcInfoGrid = str(self.getAsGdalRaster(rasterFieldName, tableName, rasterIdFieldName, rasterId, 'AAIGrid', newSRID)).splitlines()
+        arcInfoGrid = self.getAsGdalRaster(rasterFieldName, tableName, rasterIdFieldName, rasterId, 'AAIGrid', newSRID).splitlines()
 
         ## Convert arcInfoGrid to GRASS ASCII format ##
         # Get values from header which look something this:
@@ -951,9 +938,8 @@ class RasterConverter(object):
 
         # Check gdalFormat
         if not (gdalFormat in RasterConverter.supportedGdalRasterFormats(self._session)):
-            print('FORMAT NOT SUPPORTED: {0} format is not supported '
-                  'in this PostGIS installation.'.format(gdalFormat))
-            raise
+            raise ValueError('FORMAT NOT SUPPORTED: {0} format is not supported '
+                             'in this PostGIS installation.'.format(gdalFormat))
 
         # Setup srid
         if newSRID:
@@ -982,7 +968,7 @@ class RasterConverter(object):
         # Execute query
         result = self._session.execute(statement).scalar()
 
-        return result
+        return bytes(result).decode('utf-8')
 
     @classmethod
     def supportedGdalRasterFormats(cls, sqlAlchemyEngineOrSession):
@@ -1087,8 +1073,7 @@ class RasterConverter(object):
 
         if cellSize is not None:
             if not self.isNumber(cellSize):
-                print('RASTER CONVERSION ERROR: cellSize must be a number or None.')
-                raise
+                raise ValueError('RASTER CONVERSION ERROR: cellSize must be a number or None.')
 
         # Convert raster ids into formatted string
         rasterIdsString = '({0})'.format(', '.join(rasterIds))
