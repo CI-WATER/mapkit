@@ -24,6 +24,7 @@ class RasterLoader(object):
     PostGIS table with a raster field. If the table does not exist
     already, it will be created.
     '''
+    RASTER_DATA_TYPES = ["1BB", "2BUI", "4BUI", "8BSI", "8BUI", "16BSI", "16BUI", "32BSI", "32BUI", "32BF", "64BF"]
 
     def __init__(self, engine, raster2pgsql=''):
         '''
@@ -111,10 +112,15 @@ class RasterLoader(object):
         return wellKnownBinary
 
     @classmethod
-    def grassAsciiRasterToWKB(cls, session, grassRasterPath, srid, noData=0):
+    def grassAsciiRasterToWKB(cls, session, grassRasterPath, srid, noData=0, dataType='32BF'):
         """
         Load GRASS ASCII rasters directly using the makeSingleBandWKBRaster method. Do this to eliminate the raster2pgsql
         dependency.
+        :param session: SQLAlchemy session object bound to a PostGIS enabled database
+        :param grassRasterPath: Path to the GRASS ASCII raster to read into the database.
+        :param srid: SRID of the raster
+        :param noData: Value of cells to be considered as cells containing no cells
+        :param dataType: Data type of the values of the raster. One of "1BB", "2BUI", "4BUI", "8BSI", "8BUI", "16BSI", "16BUI", "32BSI", "32BUI", "32BF", or "64BF". Defaults to "32BF".
         """
         # Constants
         NUM_HEADER_LINES = 6
@@ -173,12 +179,13 @@ class RasterLoader(object):
                                                       skewX=0, skewY=0,
                                                       srid=srid,
                                                       dataArray=dataArrayString,
-                                                      noDataValue=noData)
+                                                      noDataValue=noData,
+                                                      dataType=dataType)
 
         return wellKnownBinary
 
     @classmethod
-    def makeSingleBandWKBRaster(cls, session, width, height, upperLeftX, upperLeftY, cellSizeX, cellSizeY, skewX, skewY, srid, dataArray, initialValue=None, noDataValue=None):
+    def makeSingleBandWKBRaster(cls, session, width, height, upperLeftX, upperLeftY, cellSizeX, cellSizeY, skewX, skewY, srid, dataArray, initialValue=None, noDataValue=None, dataType='32BF'):
         """
         Generate Well Known Binary via SQL. Must be used on a PostGIS database as it relies on several PostGIS
         database functions.
@@ -195,6 +202,7 @@ class RasterLoader(object):
         :param initialValue: Initial / default value of the raster cells
         :param noDataValue: Value of cells to be considered as cells containing no cells
         :param dataArray: 2-dimensional list of values or a string representation of a 2-dimensional list that will be used to populate the raster values
+        :param dataType: Data type of the values of the raster. One of "1BB", "2BUI", "4BUI", "8BSI", "8BUI", "16BSI", "16BUI", "32BSI", "32BUI", "32BF", or "64BF". Defaults to "32BF".
         """
         # Stringify the data array
         if isinstance(dataArray, str):
@@ -209,6 +217,10 @@ class RasterLoader(object):
         if noDataValue is None:
             noDataValue = 'NULL'
 
+        if dataType not in cls.RASTER_DATA_TYPES:
+            raise ValueError('"{}" is not a valid raster data type. Must be one of "{}"'.format(
+                dataType, '" ,"'.join(cls.RASTER_DATA_TYPES)))
+
         # Cell size in the Y direction must be negative
         if cellSizeY > 0:
             print('RASTER LOADER WARNING: cellSizeY should be defined as negative.')
@@ -219,7 +231,7 @@ class RasterLoader(object):
                     SELECT ST_SetValues(
                         ST_AddBand(
                             ST_MakeEmptyRaster({0}::integer, {1}::integer, {2}, {3}, {4}, {5}, {6}, {7}, {8}::integer),
-                            1::integer, '32BF'::text, {9}::double precision, {10}::double precision
+                            1::integer, '{12}'::text, {9}::double precision, {10}::double precision
                         ),
                         1, 1, 1, ARRAY{11}::double precision[][]
                     );
@@ -234,7 +246,8 @@ class RasterLoader(object):
                                srid,
                                initialValue,
                                noDataValue,
-                               dataArrayString)
+                               dataArrayString,
+                               dataType)
 
         result = session.execute(statement)
 

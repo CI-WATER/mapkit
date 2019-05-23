@@ -29,6 +29,7 @@ class RasterConverter(object):
     MAX_HEX_DECIMAL = 255
     NO_DATA_VALUE_MIN = float(-1.0)
     NO_DATA_VALUE_MAX = float(0.0)
+    GDAL_ASCII_DATA_TYPES = ['Int32', 'Float32', 'Float64']
 
     def __init__(self, sqlAlchemyEngineOrSession, colorRamp=None):
         """
@@ -868,12 +869,23 @@ class RasterConverter(object):
 
         return ET.tostring(kml), binaryPNGs
 
-    def getAsGrassAsciiRaster(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster', newSRID=None):
+    def getAsGrassAsciiRaster(self, tableName, rasterId=1, rasterIdFieldName='id', rasterFieldName='raster',
+                              newSRID=None, dataType=None):
         """
         Returns a string representation of the raster in GRASS ASCII raster format.
         """
+        options = {}
+
+        if dataType:
+            if dataType not in self.GDAL_ASCII_DATA_TYPES:
+                raise ValueError('"{}" is not a valid data type. Must be one of "{}"'.format(
+                    dataType, '", "'.join(self.GDAL_ASCII_DATA_TYPES)))
+
+            options = {'AAIGRID_DATATYPE': dataType}
+
         # Get raster in ArcInfo Grid format
-        arcInfoGrid = self.getAsGdalRaster(rasterFieldName, tableName, rasterIdFieldName, rasterId, 'AAIGrid', newSRID).splitlines()
+        arcInfoGrid = self.getAsGdalRaster(rasterFieldName, tableName, rasterIdFieldName, rasterId, 'AAIGrid', newSRID,
+                                           **options).splitlines()
 
         ## Convert arcInfoGrid to GRASS ASCII format ##
         # Get values from header which look something this:
@@ -950,7 +962,7 @@ class RasterConverter(object):
         # Compile options
         if kwargs:
             optionsList = []
-            for key, value in kwargs.iteritems():
+            for key, value in kwargs.items():
                 kwargString = "'{0}={1}'".format(key, value)
                 optionsList.append(kwargString)
 
