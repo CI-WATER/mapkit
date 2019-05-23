@@ -11,7 +11,7 @@ path = '/Users/swainn/projects/post_gis/map_kit_rasters/soil_cluster.kml'
 # Get supported gdal raster formats
 gdalFormats = RasterConverter.supportedGdalRasterFormats(engine)
 
-for key, value in gdalFormats.iteritems():
+for key, value in gdalFormats.items():
     print key, value
 
 # Configure raster converter
