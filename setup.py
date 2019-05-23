@@ -2,8 +2,9 @@ from setuptools import setup, find_packages
 
 requires = [
     'sqlalchemy',
-    'requests'
-    ]
+    'requests',
+    'epsg-ident'
+]
 
 setup(name='mapkit',
       version='1.2.4',

@@ -7,17 +7,28 @@
 * License: BSD 2-Clause
 ********************************************************************************
 """
-
+import logging
 import requests
-
 from sqlalchemy.ext.declarative import declarative_base
+try:
+    from sridentify import Sridentify
+    sridentify_enabled = True
+except ImportError:
+    sridentify_enabled = False
+
 
 Base = declarative_base()
 
+
+log = logging.getLogger(__name__)
+
+
 def version():
-    return '1.2.2'
+    return '1.2.4'
+
 
 __version__ = version()
+
 
 def lookupSpatialReferenceID(wellKnownText):
     """
@@ -28,21 +39,33 @@ def lookupSpatialReferenceID(wellKnownText):
         wellKnownText (str): The Well Known Text definition of the spatial reference system.
 
     Returns:
-        int: Spatial Reference ID
+        int: Spatial Reference ID or None if not found.
     """
-    payload = {'mode': 'wkt',
-               'terms': wellKnownText}
+    code = None
 
     try:
-        r = requests.get('http://prj2epsg.org/search.json', params=payload)
-    except requests.exceptions.ConnectionError:
-        print("SRID Lookup Error: Could not automatically determine spatial "
-              "reference ID, because there is no internet connection. "
-              "Please check connection and try again.")
-        exit(1)
+        # Optionally use epsg-ident - calls to local database
+        if sridentify_enabled:
+            ident = Sridentify(prj=wellKnownText, call_remote_api=False)
+            code = ident.get_epsg()
 
-    if r.status_code == 200:
-        json = r.json()
+        if not code:
+            # Attempt to lookup using web service
+            payload = {'mode': 'wkt',
+                       'terms': wellKnownText}
+            r = requests.get('http://prj2epsg.org/search.json', params=payload, timeout=10)
 
-        for code in json['codes']:
-            return code['code']
+            if r.status_code == 200:
+                json = r.json()
+
+                for code in json['codes']:
+                    code = code['code']
+
+        if not code:
+            log.warning("SRID Lookup Error: Spatial reference ID could not be identified.")
+
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, RuntimeError):
+        log.warning("SRID Lookup Error: Could not automatically determine spatial "
+                    "reference ID, because there is no internet connection. "
+                    "Please check connection and try again.")
+    return code
