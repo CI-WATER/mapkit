@@ -1,5 +1,4 @@
 from setuptools import setup, find_packages
-import mapkit
 
 requires = [
     'sqlalchemy',
@@ -7,10 +6,14 @@ requires = [
     'epsg-ident'
 ]
 
+
+with open('README.md') as readme:
+      description = readme.read()
+
 setup(name='mapkit',
-      version=mapkit.__version__,
+      version='1.2.6',
       description='Mapping tools for PostGIS-enabled PostgreSQL databases.',
-      long_description='',
+      long_description=description,
       author='Nathan Swain',
       author_email='nathan.swain@byu.net',
       url='https://github.com/CI-WATER/mapkit',
