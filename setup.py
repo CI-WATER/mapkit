@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+import mapkit
 
 requires = [
     'sqlalchemy',
@@ -7,7 +8,7 @@ requires = [
 ]
 
 setup(name='mapkit',
-      version='1.2.4',
+      version=mapkit.__version__,
       description='Mapping tools for PostGIS-enabled PostgreSQL databases.',
       long_description='',
       author='Nathan Swain',

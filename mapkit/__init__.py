@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 
 def version():
-    return '1.2.4'
+    return '1.2.5'
 
 
 __version__ = version()

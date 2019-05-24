@@ -1,5 +1,5 @@
-# MapKit 1.2.4
-* Author: Nathan Swain
+# MapKit
+* Author: Nathan Swain, Alan Snow
 * Copyright: (c) Brigham Young University 2013
 * License: BSD 2-Clause
 
