@@ -8,7 +8,8 @@ requires = [
 
 
 with open('README.md') as readme:
-      description = readme.read()
+    description = readme.read()
+
 
 setup(name='mapkit',
       version='1.2.6',
@@ -24,4 +25,4 @@ setup(name='mapkit',
       install_requires=requires,
       tests_require=requires,
       test_suite=''
-      )
+)
